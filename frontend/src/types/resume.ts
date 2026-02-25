@@ -8,6 +8,7 @@ export interface Profile {
   github: string | null
   portfolio: string | null
   summary: string | null
+  section_headers: Record<string, string> | null
 }
 
 export interface Experience {

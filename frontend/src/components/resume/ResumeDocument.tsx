@@ -38,8 +38,6 @@ function resolveFont(font: string): string {
 
 function buildStyles(cfg: ResumeStyleConfig) {
   const fontFamily = resolveFont(cfg.font)
-  const body = cfg.bullet.size
-  const title = cfg.jobTitle.size
 
   return StyleSheet.create({
     page: {
@@ -53,122 +51,42 @@ function buildStyles(cfg: ResumeStyleConfig) {
       lineHeight: cfg.lineHeight,
     },
 
-    // --- Header: name + contact tightly coupled ---
-    headerBlock: {
-      alignItems: 'center',
-      marginBottom: 0,
-    },
-    name: {
-      fontSize: cfg.name.size,
-      fontWeight: 'bold',
-      textAlign: 'center',
-      lineHeight: 1.0,
-      marginBottom: 0,
-    },
-    contact: {
-      fontSize: cfg.contact.size,
-      textAlign: 'center',
-      color: cfg.colors.muted,
-      lineHeight: 1.0,
-      marginTop: 2,
-      marginBottom: 0,
-    },
+    // --- Header ---
+    headerBlock: { alignItems: 'center', marginBottom: 0 },
+    name: { fontSize: cfg.name.size, fontWeight: 'bold', textAlign: 'center', lineHeight: 1.0, marginBottom: 0 },
+    contact: { fontSize: cfg.contact.size, textAlign: 'center', color: cfg.colors.muted, lineHeight: 1.0, marginTop: 2, marginBottom: 0 },
 
-    // --- Section header with bottom rule ---
+    // --- Section header ---
     sectionHeader: {
-      fontSize: cfg.sectionHeader.size,
-      fontWeight: 'bold',
-      textTransform: 'uppercase',
+      fontSize: cfg.sectionHeader.size, fontWeight: 'bold', textTransform: 'uppercase',
       borderBottomWidth: cfg.sectionHeader.borderBottom ? cfg.sectionHeader.borderWidth : 0,
-      borderBottomColor: cfg.sectionHeader.borderColor,
-      borderBottomStyle: 'solid',
-      marginTop: cfg.sectionHeader.spaceBefore,
-      paddingBottom: 2,
-      marginBottom: cfg.sectionHeader.spaceAfter,
+      borderBottomColor: cfg.sectionHeader.borderColor, borderBottomStyle: 'solid',
+      marginTop: cfg.sectionHeader.spaceBefore, paddingBottom: 2, marginBottom: cfg.sectionHeader.spaceAfter,
     },
 
-    // --- Summary ---
-    summary: {
-      fontSize: body,
-      textAlign: 'justify',
-      lineHeight: cfg.bullet.lineHeight,
-      marginTop: 1,
-    },
+    // --- Summary (own style key) ---
+    summary: { fontSize: cfg.summaryText.size, textAlign: cfg.summaryText.align, lineHeight: cfg.summaryText.lineHeight, marginTop: 1 },
 
-    // --- Skills: single Text per row, bold label inline ---
-    skillParagraph: {
-      fontSize: body,
-      marginBottom: 1,
-    },
+    // --- Skills ---
+    skillParagraph: { fontSize: cfg.skillValue.size, marginBottom: 1 },
 
-    // --- Title + Date row (experience, education) ---
-    titleDateRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginTop: cfg.jobTitle.spaceBefore,
-    },
-    titleDateRowNoTop: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginTop: 1,
-    },
-    titleCol: {
-      flex: 1,
-      marginRight: 10,
-    },
-    dateCol: {
-      flexShrink: 0,
-      textAlign: 'right',
-      fontSize: title,
-      fontStyle: 'italic',
-    },
+    // --- Experience ---
+    expTitleDateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: cfg.jobTitle.spaceBefore },
+    expTitleCol: { flex: 1, marginRight: 10 },
+    expDateCol: { flexShrink: 0, textAlign: 'right', fontSize: cfg.dates.size, fontStyle: 'italic' },
+    expBulletRow: { flexDirection: 'row', paddingLeft: cfg.expBullet.indent, marginBottom: 0.5 },
+    expBulletDot: { fontSize: cfg.expBullet.size, width: 10, flexShrink: 0 },
+    expBulletText: { fontSize: cfg.expBullet.size, flex: 1, textAlign: cfg.expBullet.align, lineHeight: cfg.expBullet.lineHeight },
 
-    // --- Tech stack line (italic, below title) ---
-    techLine: {
-      fontSize: body,
-      fontStyle: 'italic',
-      color: cfg.colors.muted,
-      marginBottom: 1,
-    },
+    // --- Projects ---
+    projBulletRow: { flexDirection: 'row', paddingLeft: cfg.projBullet.indent, marginBottom: 0.5 },
+    projBulletDot: { fontSize: cfg.projBullet.size, width: 10, flexShrink: 0 },
+    projBulletText: { fontSize: cfg.projBullet.size, flex: 1, textAlign: cfg.projBullet.align, lineHeight: cfg.projBullet.lineHeight },
 
-    // --- Bullets ---
-    bulletRow: {
-      flexDirection: 'row',
-      paddingLeft: cfg.bullet.indent,
-      marginBottom: 0.5,
-    },
-    bulletDot: {
-      fontSize: body,
-      width: 10,
-      flexShrink: 0,
-    },
-    bulletText: {
-      fontSize: body,
-      flex: 1,
-      textAlign: 'justify',
-      lineHeight: cfg.bullet.lineHeight,
-    },
-
-    // --- Education: single row, text left + date right ---
-    eduRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginTop: 1,
-    },
-    eduText: {
-      fontSize: body,
-      flex: 1,
-      marginRight: 4,
-    },
-    eduDate: {
-      fontSize: body,
-      flexShrink: 0,
-      textAlign: 'right',
-      fontStyle: 'italic',
-    },
+    // --- Education ---
+    eduRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 1 },
+    eduText: { fontSize: cfg.education.size, flex: 1, marginRight: 4 },
+    eduDate: { fontSize: cfg.eduDate.size, flexShrink: 0, textAlign: 'right', fontStyle: cfg.eduDate.italic ? 'italic' : 'normal' },
   })
 }
 
@@ -183,6 +101,7 @@ export interface ResumeDocumentProps {
   styleConfig: ResumeStyleConfig
   richContent?: Record<string, any>
   elementStyles?: Record<string, ElementStyleOverride>
+  sectionHeaders?: Record<string, string>
 }
 
 // --- Reusable components ---
@@ -191,34 +110,22 @@ function SectionHeader({ title, s }: { title: string; s: ReturnType<typeof build
   return <Text style={s.sectionHeader}>{title}</Text>
 }
 
-function Bullet({ text, s, richJson, elStyleOverride }: {
+function Bullet({ text, richJson, elStyleOverride, rowStyle, dotStyle, textStyle }: {
   text: string
-  s: ReturnType<typeof buildStyles>
   richJson?: any
   elStyleOverride?: ElementStyleOverride
+  rowStyle: any
+  dotStyle: any
+  textStyle: any
 }) {
   const useRich = richJson && hasRichFormatting(richJson)
   const overrides = resolveElementStylePdf(elStyleOverride)
   return (
-    <View style={s.bulletRow}>
-      <Text style={s.bulletDot}>{'\u2022'}</Text>
-      <Text style={[s.bulletText, overrides]}>
+    <View style={rowStyle}>
+      <Text style={dotStyle}>{'\u2022'}</Text>
+      <Text style={[textStyle, overrides]}>
         {useRich ? richTextToPdfNodes(richJson) : text}
       </Text>
-    </View>
-  )
-}
-
-function TitleDateLine({ title, date, s, noTopMargin }: {
-  title: React.ReactNode
-  date: string
-  s: ReturnType<typeof buildStyles>
-  noTopMargin?: boolean
-}) {
-  return (
-    <View style={noTopMargin ? s.titleDateRowNoTop : s.titleDateRow}>
-      <View style={s.titleCol}>{typeof title === 'string' ? <Text>{title}</Text> : title}</View>
-      <Text style={s.dateCol}>{date}</Text>
     </View>
   )
 }
@@ -234,11 +141,11 @@ export default function ResumeDocument({
   styleConfig,
   richContent = {},
   elementStyles = {},
+  sectionHeaders = {},
 }: ResumeDocumentProps) {
   const s = buildStyles(styleConfig)
   const pageSize = PAGE_SIZES[styleConfig.page]
   const titleSize = styleConfig.jobTitle.size
-  const bodySize = styleConfig.bullet.size
 
   const contactParts = [
     contact.location, contact.phone, contact.email,
@@ -256,14 +163,14 @@ export default function ResumeDocument({
       <Page size={{ width: pageSize.width, height: pageSize.height }} style={s.page}>
         {/* ── Name + Contact ── */}
         <View style={s.headerBlock}>
-          <Text style={s.name}>{contact.fullName}</Text>
+          <Text style={[s.name, resolveElementStylePdf(elementStyles['contact-name'])]}>{contact.fullName}</Text>
           {contactLine && <Text style={s.contact}>{contactLine}</Text>}
         </View>
 
         {/* ── Professional Summary ── */}
         {summary && (
           <>
-            <SectionHeader title="Professional Summary" s={s} />
+            <SectionHeader title={sectionHeaders.summary || 'Professional Summary'} s={s} />
             <Text style={[s.summary, resolveElementStylePdf(elementStyles['summary'])]}>
               {richContent['summary'] && hasRichFormatting(richContent['summary'])
                 ? richTextToPdfNodes(richContent['summary'])
@@ -275,10 +182,10 @@ export default function ResumeDocument({
         {/* ── Technical Skills ── */}
         {incSkill.length > 0 && (
           <>
-            <SectionHeader title="Technical Skills" s={s} />
+            <SectionHeader title={sectionHeaders.skills || 'Technical Skills'} s={s} />
             {incSkill.map(sk => (
               <Text key={sk.id} style={s.skillParagraph}>
-                <Text style={{ fontWeight: 'bold' }}>{sk.category}: </Text>
+                <Text style={{ fontWeight: styleConfig.skillLabel.bold ? 'bold' : 'normal', fontSize: styleConfig.skillLabel.size, ...resolveElementStylePdf(elementStyles[`skill-${sk.id}-category`]) }}>{sk.category}: </Text>
                 <Text style={resolveElementStylePdf(elementStyles[`skill-${sk.id}-items`])}>{sk.items}</Text>
               </Text>
             ))}
@@ -288,21 +195,20 @@ export default function ResumeDocument({
         {/* ── Professional Experience ── */}
         {incExp.length > 0 && (
           <>
-            <SectionHeader title="Professional Experience" s={s} />
+            <SectionHeader title={sectionHeaders.experience || 'Professional Experience'} s={s} />
             {incExp.map(exp => (
               <View key={exp.id} wrap={false}>
-                <TitleDateLine
-                  s={s}
-                  date={`${exp.dateStart} - ${exp.dateEnd || 'Present'}`}
-                  title={
+                <View style={s.expTitleDateRow}>
+                  <View style={s.expTitleCol}>
                     <Text style={{ fontSize: titleSize }}>
-                      <Text style={{ fontWeight: 'bold' }}>{exp.company}</Text>
-                      <Text> | {exp.title}</Text>
+                      <Text style={{ fontWeight: styleConfig.jobTitle.bold ? 'bold' : 'normal', ...resolveElementStylePdf(elementStyles[`exp-${exp.id}-company`]) }}>{exp.company}</Text>
+                      <Text style={resolveElementStylePdf(elementStyles[`exp-${exp.id}-title`])}> | {exp.title}</Text>
                     </Text>
-                  }
-                />
+                  </View>
+                  <Text style={[s.expDateCol, resolveElementStylePdf(elementStyles[`exp-${exp.id}-date`])]}>{exp.dateStart} - {exp.dateEnd || 'Present'}</Text>
+                </View>
                 {exp.bullets.filter(Boolean).map((b, i) => (
-                  <Bullet key={i} text={b} s={s} richJson={richContent[`exp-${exp.id}-bullet-${i}`]} elStyleOverride={elementStyles[`exp-${exp.id}-bullet-${i}`]} />
+                  <Bullet key={i} text={b} rowStyle={s.expBulletRow} dotStyle={s.expBulletDot} textStyle={s.expBulletText} richJson={richContent[`exp-${exp.id}-bullet-${i}`]} elStyleOverride={elementStyles[`exp-${exp.id}-bullet-${i}`]} />
                 ))}
               </View>
             ))}
@@ -312,15 +218,15 @@ export default function ResumeDocument({
         {/* ── Key Projects ── */}
         {incProj.length > 0 && (
           <>
-            <SectionHeader title="Key Projects" s={s} />
+            <SectionHeader title={sectionHeaders.projects || 'Key Projects'} s={s} />
             {incProj.map(proj => (
               <View key={proj.id} wrap={false}>
-                <Text style={{ fontSize: bodySize, marginTop: styleConfig.projectTitle.spaceBefore }}>
-                  <Text style={{ fontWeight: 'bold', fontSize: titleSize }}>{proj.name}</Text>
-                  <Text style={{ fontStyle: 'italic' }}> | {proj.techStack}</Text>
+                <Text style={{ marginTop: styleConfig.projectTitle.spaceBefore }}>
+                  <Text style={{ fontWeight: styleConfig.projectTitle.bold ? 'bold' : 'normal', fontSize: styleConfig.projectTitle.size, ...resolveElementStylePdf(elementStyles[`proj-${proj.id}-name`]) }}>{proj.name}</Text>
+                  <Text style={{ fontStyle: styleConfig.projectTech.italic ? 'italic' : 'normal', fontSize: styleConfig.projectTech.size, color: styleConfig.colors.muted, ...resolveElementStylePdf(elementStyles[`proj-${proj.id}-tech`]) }}> | {proj.techStack}</Text>
                 </Text>
                 {proj.bullets.filter(Boolean).map((b, i) => (
-                  <Bullet key={i} text={b} s={s} richJson={richContent[`proj-${proj.id}-bullet-${i}`]} elStyleOverride={elementStyles[`proj-${proj.id}-bullet-${i}`]} />
+                  <Bullet key={i} text={b} rowStyle={s.projBulletRow} dotStyle={s.projBulletDot} textStyle={s.projBulletText} richJson={richContent[`proj-${proj.id}-bullet-${i}`]} elStyleOverride={elementStyles[`proj-${proj.id}-bullet-${i}`]} />
                 ))}
               </View>
             ))}
@@ -330,14 +236,14 @@ export default function ResumeDocument({
         {/* ── Education ── */}
         {incEdu.length > 0 && (
           <>
-            <SectionHeader title="Education" s={s} />
+            <SectionHeader title={sectionHeaders.education || 'Education'} s={s} />
             {incEdu.map(edu => (
               <View key={edu.id} style={s.eduRow}>
                 <Text style={s.eduText}>
-                  <Text style={{ fontWeight: 'bold' }}>{edu.institution}</Text>
-                  <Text> | {edu.degree}{edu.gpa ? ` (GPA: ${edu.gpa})` : ''}</Text>
+                  <Text style={{ fontWeight: styleConfig.education.bold ? 'bold' : 'normal', ...resolveElementStylePdf(elementStyles[`edu-${edu.id}-institution`]) }}>{edu.institution}</Text>
+                  <Text style={resolveElementStylePdf(elementStyles[`edu-${edu.id}-degree`])}> | {edu.degree}{edu.gpa ? ` (GPA: ${edu.gpa})` : ''}</Text>
                 </Text>
-                <Text style={s.eduDate}>{edu.dateStart} - {edu.dateEnd}</Text>
+                <Text style={[s.eduDate, resolveElementStylePdf(elementStyles[`edu-${edu.id}-date`])]}>{edu.dateStart} - {edu.dateEnd}</Text>
               </View>
             ))}
           </>

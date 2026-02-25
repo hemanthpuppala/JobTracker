@@ -164,7 +164,7 @@ export default function InteractiveEditor() {
   const store = useResumeBuilderStore()
   const {
     contact, summary, experiences, projects, skills, education, styles,
-    selectedElementId,
+    sectionHeaders, selectedElementId,
   } = store
 
   const h = useMemo(() => buildHtmlStyles(styles), [styles])
@@ -174,11 +174,15 @@ export default function InteractiveEditor() {
   const incSkill = skills.filter(sk => sk.included)
   const incEdu = education.filter(e => e.included)
 
-  const contactParts = [
-    contact.location, contact.phone, contact.email,
-    contact.linkedin, contact.github, contact.portfolio,
-  ].filter(Boolean)
-  const contactLine = contactParts.join(styles.contact.separator)
+  // Contact fields with their keys for individual editing
+  const contactFields = [
+    { key: 'location' as const, value: contact.location },
+    { key: 'phone' as const, value: contact.phone },
+    { key: 'email' as const, value: contact.email },
+    { key: 'linkedin' as const, value: contact.linkedin },
+    { key: 'github' as const, value: contact.github },
+    { key: 'portfolio' as const, value: contact.portfolio },
+  ].filter(f => f.value)
 
   return (
     <div className="h-full flex">
@@ -203,15 +207,32 @@ export default function InteractiveEditor() {
               elementId="contact-name"
               style={h.name}
             />
-            {contactLine && (
-              <div style={h.contact}>{contactLine}</div>
+            {contactFields.length > 0 && (
+              <div style={h.contactLine}>
+                {contactFields.map((f, i) => (
+                  <span key={f.key} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    {i > 0 && <span style={h.contactSep}>{styles.contact.separator}</span>}
+                    <InlineField
+                      value={f.value}
+                      onChange={(text) => store.setContact({ [f.key]: text })}
+                      elementId={`contact-${f.key}`}
+                      style={h.contactField}
+                    />
+                  </span>
+                ))}
+              </div>
             )}
           </div>
 
           {/* ── Professional Summary ── */}
           {summary && (
             <>
-              <div style={h.sectionHeader}>Professional Summary</div>
+              <InlineField
+                value={sectionHeaders.summary}
+                onChange={(text) => store.setSectionHeader('summary', text)}
+                elementId="header-summary"
+                style={h.sectionHeader}
+              />
               <InlineField
                 value={summary}
                 onChange={(text) => store.setSummary(text)}
@@ -224,10 +245,21 @@ export default function InteractiveEditor() {
           {/* ── Technical Skills ── */}
           {incSkill.length > 0 && (
             <>
-              <div style={h.sectionHeader}>Technical Skills</div>
+              <InlineField
+                value={sectionHeaders.skills}
+                onChange={(text) => store.setSectionHeader('skills', text)}
+                elementId="header-skills"
+                style={h.sectionHeader}
+              />
               {incSkill.map(sk => (
                 <div key={sk.id} style={h.skillParagraph}>
-                  <span style={h.skillLabel}>{sk.category}: </span>
+                  <InlineField
+                    value={sk.category}
+                    onChange={(text) => store.updateSkill(sk.id, { category: text })}
+                    elementId={`skill-${sk.id}-category`}
+                    style={{ ...h.skillLabel, display: 'inline-block' }}
+                  />
+                  <span style={h.skillLabel}>: </span>
                   <InlineField
                     value={sk.items}
                     onChange={(text) => store.updateSkill(sk.id, { items: text })}
@@ -242,38 +274,53 @@ export default function InteractiveEditor() {
           {/* ── Professional Experience ── */}
           {incExp.length > 0 && (
             <>
-              <div style={h.sectionHeader}>Professional Experience</div>
+              <InlineField
+                value={sectionHeaders.experience}
+                onChange={(text) => store.setSectionHeader('experience', text)}
+                elementId="header-experience"
+                style={h.sectionHeader}
+              />
               {incExp.map(exp => (
                 <div key={exp.id}>
-                  <div style={h.titleDateRow}>
-                    <div style={h.titleCol}>
-                      <div style={h.titleText}>
+                  <div style={h.expTitleDateRow}>
+                    <div style={h.expTitleCol}>
+                      <div style={{ display: 'flex', alignItems: 'baseline' }}>
                         <InlineField
-                          value={`${exp.company} | ${exp.title}`}
-                          onChange={(text) => {
-                            const parts = text.split(' | ')
-                            store.updateExperience(exp.id, {
-                              company: parts[0] || '',
-                              title: parts.slice(1).join(' | ') || '',
-                            })
-                          }}
+                          value={exp.company}
+                          onChange={(text) => store.updateExperience(exp.id, { company: text })}
+                          elementId={`exp-${exp.id}-company`}
+                          style={h.expCompany}
+                        />
+                        <span style={h.expTitle}> | </span>
+                        <InlineField
+                          value={exp.title}
+                          onChange={(text) => store.updateExperience(exp.id, { title: text })}
                           elementId={`exp-${exp.id}-title`}
-                          style={h.titleBold}
+                          style={h.expTitle}
                         />
                       </div>
                     </div>
-                    <div style={h.dateCol}>
-                      {exp.dateStart} - {exp.dateEnd || 'Present'}
-                    </div>
+                    <InlineField
+                      value={`${exp.dateStart} - ${exp.dateEnd || 'Present'}`}
+                      onChange={(text) => {
+                        const parts = text.split(' - ')
+                        store.updateExperience(exp.id, {
+                          dateStart: parts[0] || '',
+                          dateEnd: parts.slice(1).join(' - ') || '',
+                        })
+                      }}
+                      elementId={`exp-${exp.id}-date`}
+                      style={h.expDate}
+                    />
                   </div>
                   {exp.bullets.filter(Boolean).map((b, i) => (
-                    <div key={i} style={h.bulletRow}>
-                      <span style={h.bulletDot}>{'\u2022'}</span>
+                    <div key={i} style={h.expBulletRow}>
+                      <span style={h.expBulletDot}>{'\u2022'}</span>
                       <InlineField
                         value={b}
                         onChange={(text) => store.updateExperienceBullet(exp.id, i, text)}
                         elementId={`exp-${exp.id}-bullet-${i}`}
-                        style={h.bulletText}
+                        style={h.expBulletText}
                       />
                     </div>
                   ))}
@@ -285,21 +332,37 @@ export default function InteractiveEditor() {
           {/* ── Key Projects ── */}
           {incProj.length > 0 && (
             <>
-              <div style={h.sectionHeader}>Key Projects</div>
+              <InlineField
+                value={sectionHeaders.projects}
+                onChange={(text) => store.setSectionHeader('projects', text)}
+                elementId="header-projects"
+                style={h.sectionHeader}
+              />
               {incProj.map(proj => (
                 <div key={proj.id}>
-                  <div style={h.projectRow}>
-                    <span style={h.projectName}>{proj.name}</span>
-                    <span style={h.projectTech}> | {proj.techStack}</span>
+                  <div style={h.projRow}>
+                    <InlineField
+                      value={proj.name}
+                      onChange={(text) => store.updateProject(proj.id, { name: text })}
+                      elementId={`proj-${proj.id}-name`}
+                      style={{ ...h.projName, display: 'inline-block' }}
+                    />
+                    <span style={h.projTech}> | </span>
+                    <InlineField
+                      value={proj.techStack}
+                      onChange={(text) => store.updateProject(proj.id, { techStack: text })}
+                      elementId={`proj-${proj.id}-tech`}
+                      style={{ ...h.projTech, display: 'inline-block' }}
+                    />
                   </div>
                   {proj.bullets.filter(Boolean).map((b, i) => (
-                    <div key={i} style={h.bulletRow}>
-                      <span style={h.bulletDot}>{'\u2022'}</span>
+                    <div key={i} style={h.projBulletRow}>
+                      <span style={h.projBulletDot}>{'\u2022'}</span>
                       <InlineField
                         value={b}
                         onChange={(text) => store.updateProjectBullet(proj.id, i, text)}
                         elementId={`proj-${proj.id}-bullet-${i}`}
-                        style={h.bulletText}
+                        style={h.projBulletText}
                       />
                     </div>
                   ))}
@@ -311,14 +374,42 @@ export default function InteractiveEditor() {
           {/* ── Education ── */}
           {incEdu.length > 0 && (
             <>
-              <div style={h.sectionHeader}>Education</div>
+              <InlineField
+                value={sectionHeaders.education}
+                onChange={(text) => store.setSectionHeader('education', text)}
+                elementId="header-education"
+                style={h.sectionHeader}
+              />
               {incEdu.map(edu => (
                 <div key={edu.id} style={h.eduRow}>
                   <div style={h.eduText}>
-                    <span style={h.eduBold}>{edu.institution}</span>
-                    <span> | {edu.degree}{edu.gpa ? ` (GPA: ${edu.gpa})` : ''}</span>
+                    <InlineField
+                      value={edu.institution}
+                      onChange={(text) => store.updateEducation(edu.id, { institution: text })}
+                      elementId={`edu-${edu.id}-institution`}
+                      style={{ ...h.eduInstitution, display: 'inline-block' }}
+                    />
+                    <span style={h.eduDegree}> | </span>
+                    <InlineField
+                      value={`${edu.degree}${edu.gpa ? ` (GPA: ${edu.gpa})` : ''}`}
+                      onChange={(text) => {
+                        const gpaMatch = text.match(/\(GPA:\s*(.+?)\)/)
+                        const degree = text.replace(/\s*\(GPA:.*?\)/, '').trim()
+                        store.updateEducation(edu.id, { degree, gpa: gpaMatch?.[1] || '' })
+                      }}
+                      elementId={`edu-${edu.id}-degree`}
+                      style={{ ...h.eduDegree, display: 'inline-block' }}
+                    />
                   </div>
-                  <div style={h.eduDate}>{edu.dateStart} - {edu.dateEnd}</div>
+                  <InlineField
+                    value={`${edu.dateStart} - ${edu.dateEnd}`}
+                    onChange={(text) => {
+                      const parts = text.split(' - ')
+                      store.updateEducation(edu.id, { dateStart: parts[0] || '', dateEnd: parts.slice(1).join(' - ') || '' })
+                    }}
+                    elementId={`edu-${edu.id}-date`}
+                    style={h.eduDate}
+                  />
                 </div>
               ))}
             </>

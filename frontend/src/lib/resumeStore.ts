@@ -100,6 +100,7 @@ export interface ResumeBuilderState {
   projects: ProjectItem[]
   skills: SkillItem[]
   education: EducationItem[]
+  sectionHeaders: Record<string, string>
 
   // Style
   styles: ResumeStyleConfig
@@ -117,6 +118,7 @@ export interface ResumeBuilderState {
   // Actions — content
   setContact: (c: Partial<ContactInfo>) => void
   setSummary: (s: string) => void
+  setSectionHeader: (key: string, value: string) => void
 
   setExperiences: (exps: ExperienceItem[]) => void
   updateExperience: (id: number, data: Partial<ExperienceItem>) => void
@@ -153,6 +155,7 @@ export interface ResumeBuilderState {
   setBaseFontSize: (size: number) => void
   setMarginPreset: (preset: keyof typeof MARGIN_PRESETS) => void
   setPageSize: (page: 'A4' | 'LETTER') => void
+  updateStyleKey: <K extends keyof ResumeStyleConfig>(key: K, value: Partial<ResumeStyleConfig[K]>) => void
 
   // Actions — lifecycle
   setLoaded: (v: boolean) => void
@@ -202,6 +205,13 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
   projects: [],
   skills: [],
   education: [],
+  sectionHeaders: {
+    summary: 'Professional Summary',
+    skills: 'Technical Skills',
+    experience: 'Professional Experience',
+    projects: 'Key Projects',
+    education: 'Education',
+  },
   styles: { ...DEFAULT_RESUME_STYLES },
   loaded: false,
   dirty: false,
@@ -213,6 +223,7 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
   // --- Contact ---
   setContact: (c) => set(s => ({ contact: { ...s.contact, ...c }, dirty: true })),
   setSummary: (summary) => set({ summary, dirty: true }),
+  setSectionHeader: (key, value) => set(s => ({ sectionHeaders: { ...s.sectionHeaders, [key]: value }, dirty: true })),
 
   // --- Experiences ---
   setExperiences: (experiences) => set({ experiences }),
@@ -308,6 +319,15 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
     styles: { ...s.styles, margins: { ...MARGIN_PRESETS[preset] } }, dirty: true,
   })),
   setPageSize: (page) => set(s => ({ styles: { ...s.styles, page }, dirty: true })),
+  updateStyleKey: (key, value) => set(s => ({
+    styles: {
+      ...s.styles,
+      [key]: typeof s.styles[key] === 'object' && typeof value === 'object'
+        ? { ...s.styles[key], ...value }
+        : value,
+    },
+    dirty: true,
+  })),
 
   // --- Lifecycle ---
   setLoaded: (loaded) => set({ loaded }),
@@ -326,6 +346,14 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
         portfolio: profile.portfolio || '',
       },
       summary: profile.summary || '',
+      sectionHeaders: {
+        summary: 'Professional Summary',
+        skills: 'Technical Skills',
+        experience: 'Professional Experience',
+        projects: 'Key Projects',
+        education: 'Education',
+        ...(profile.section_headers || {}),
+      },
       experiences: experiences.map(e => ({
         id: e.id,
         company: e.company,

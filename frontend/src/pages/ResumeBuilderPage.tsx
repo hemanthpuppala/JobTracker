@@ -35,7 +35,7 @@ export default function ResumeBuilderPage() {
   // Save to DB
   const handleSave = useCallback(async () => {
     try {
-      const { contact, summary } = store
+      const { contact, summary, sectionHeaders } = store
       await updateProfile({
         full_name: contact.fullName,
         location: contact.location,
@@ -45,6 +45,7 @@ export default function ResumeBuilderPage() {
         github: contact.github,
         portfolio: contact.portfolio,
         summary,
+        section_headers: sectionHeaders,
       })
       await Promise.all(store.experiences.map(exp =>
         experiencesApi.update(exp.id, {
@@ -101,6 +102,7 @@ export default function ResumeBuilderPage() {
         styleConfig={store.styles}
         richContent={store.richContent}
         elementStyles={store.elementStyles}
+        sectionHeaders={store.sectionHeaders}
       />
     ).toBlob()
     const url = URL.createObjectURL(blob)

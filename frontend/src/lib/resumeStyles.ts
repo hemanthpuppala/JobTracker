@@ -4,6 +4,15 @@
  * All sizes in points (pt). Margins in points.
  */
 
+/** Shared bullet style shape — used per-section so each section is independent */
+export interface BulletStyle {
+  size: number
+  align: 'justify' | 'left'
+  indent: number
+  symbol: string
+  lineHeight: number
+}
+
 export interface ResumeStyleConfig {
   font: string
   baseFontSize: number
@@ -11,13 +20,16 @@ export interface ResumeStyleConfig {
   contact: { size: number; align: 'center' | 'left' | 'right'; separator: string }
   sectionHeader: { size: number; bold: boolean; uppercase: boolean; borderBottom: boolean; borderColor: string; borderWidth: number; spaceBefore: number; spaceAfter: number }
   jobTitle: { size: number; bold: boolean; spaceBefore: number }
-  bullet: { size: number; align: 'justify' | 'left'; indent: number; symbol: string; lineHeight: number }
+  expBullet: BulletStyle
   dates: { size: number; align: 'right' }
   projectTitle: { size: number; bold: boolean; spaceBefore: number }
   projectTech: { size: number; italic: boolean }
+  projBullet: BulletStyle
+  summaryText: { size: number; align: 'justify' | 'left'; lineHeight: number }
   skillLabel: { size: number; bold: boolean }
   skillValue: { size: number }
   education: { size: number; bold: boolean }
+  eduDate: { size: number; italic: boolean }
   margins: { top: number; bottom: number; left: number; right: number }
   page: 'A4' | 'LETTER'
   lineHeight: number
@@ -40,13 +52,16 @@ export const DEFAULT_RESUME_STYLES: ResumeStyleConfig = {
     spaceAfter: 2,
   },
   jobTitle: { size: 10, bold: true, spaceBefore: 4 },
-  bullet: { size: 9.5, align: 'justify', indent: 12, symbol: '\u2022', lineHeight: 1.2 },
+  expBullet: { size: 9.5, align: 'justify', indent: 12, symbol: '\u2022', lineHeight: 1.2 },
   dates: { size: 10, align: 'right' },
   projectTitle: { size: 10, bold: true, spaceBefore: 4 },
   projectTech: { size: 9.5, italic: true },
+  projBullet: { size: 9.5, align: 'justify', indent: 12, symbol: '\u2022', lineHeight: 1.2 },
+  summaryText: { size: 9.5, align: 'justify', lineHeight: 1.2 },
   skillLabel: { size: 9.5, bold: true },
   skillValue: { size: 9.5 },
   education: { size: 9.5, bold: true },
+  eduDate: { size: 9.5, italic: true },
   margins: { top: 36, bottom: 36, left: 36, right: 36 },
   page: 'LETTER',
   lineHeight: 1.15,
@@ -71,8 +86,9 @@ export const PAGE_SIZES = {
 
 /** Size keys that scale with baseFontSize */
 const SCALABLE_KEYS = [
-  'name', 'contact', 'sectionHeader', 'jobTitle', 'bullet',
-  'dates', 'projectTitle', 'projectTech', 'skillLabel', 'skillValue', 'education',
+  'name', 'contact', 'sectionHeader', 'jobTitle', 'expBullet',
+  'dates', 'projectTitle', 'projectTech', 'projBullet', 'summaryText',
+  'skillLabel', 'skillValue', 'education', 'eduDate',
 ] as const
 
 /**
@@ -93,8 +109,6 @@ const HTML_FONT_MAP: Record<string, string> = {
  */
 export function buildHtmlStyles(cfg: ResumeStyleConfig) {
   const fontFamily = HTML_FONT_MAP[cfg.font] || 'sans-serif'
-  const body = cfg.bullet.size
-  const title = cfg.jobTitle.size
   const pageSize = PAGE_SIZES[cfg.page]
 
   return {
@@ -124,13 +138,28 @@ export function buildHtmlStyles(cfg: ResumeStyleConfig) {
       marginBottom: 0,
     } as React.CSSProperties,
 
-    contact: {
+    contactLine: {
       fontSize: `${cfg.contact.size}pt`,
       textAlign: cfg.contact.align,
       color: cfg.colors.muted,
       lineHeight: 1.0,
       marginTop: 2,
       marginBottom: 0,
+      display: 'flex' as const,
+      flexWrap: 'wrap' as const,
+      justifyContent: 'center' as const,
+      gap: 0,
+    } as React.CSSProperties,
+
+    contactField: {
+      fontSize: `${cfg.contact.size}pt`,
+      color: cfg.colors.muted,
+    } as React.CSSProperties,
+
+    contactSep: {
+      fontSize: `${cfg.contact.size}pt`,
+      color: cfg.colors.muted,
+      userSelect: 'none' as const,
     } as React.CSSProperties,
 
     sectionHeader: {
@@ -146,14 +175,14 @@ export function buildHtmlStyles(cfg: ResumeStyleConfig) {
     } as React.CSSProperties,
 
     summary: {
-      fontSize: `${body}pt`,
-      textAlign: cfg.bullet.align,
-      lineHeight: cfg.bullet.lineHeight,
+      fontSize: `${cfg.summaryText.size}pt`,
+      textAlign: cfg.summaryText.align,
+      lineHeight: cfg.summaryText.lineHeight,
       marginTop: 1,
     } as React.CSSProperties,
 
     skillParagraph: {
-      fontSize: `${body}pt`,
+      fontSize: `${cfg.skillValue.size}pt`,
       marginBottom: 1,
     } as React.CSSProperties,
 
@@ -166,7 +195,8 @@ export function buildHtmlStyles(cfg: ResumeStyleConfig) {
       fontSize: `${cfg.skillValue.size}pt`,
     } as React.CSSProperties,
 
-    titleDateRow: {
+    // --- Experience ---
+    expTitleDateRow: {
       display: 'flex' as const,
       flexDirection: 'row' as const,
       justifyContent: 'space-between' as const,
@@ -174,62 +204,84 @@ export function buildHtmlStyles(cfg: ResumeStyleConfig) {
       marginTop: cfg.jobTitle.spaceBefore,
     } as React.CSSProperties,
 
-    titleCol: {
+    expTitleCol: {
       flex: 1,
       marginRight: 10,
     } as React.CSSProperties,
 
-    titleText: {
-      fontSize: `${title}pt`,
+    expCompany: {
+      fontSize: `${cfg.jobTitle.size}pt`,
+      fontWeight: cfg.jobTitle.bold ? 'bold' : 'normal',
     } as React.CSSProperties,
 
-    titleBold: {
-      fontWeight: 'bold' as const,
+    expTitle: {
+      fontSize: `${cfg.jobTitle.size}pt`,
     } as React.CSSProperties,
 
-    dateCol: {
+    expDate: {
       flexShrink: 0,
       textAlign: 'right' as const,
-      fontSize: `${title}pt`,
+      fontSize: `${cfg.dates.size}pt`,
       fontStyle: 'italic' as const,
     } as React.CSSProperties,
 
-    projectRow: {
-      fontSize: `${body}pt`,
+    expBulletRow: {
+      display: 'flex' as const,
+      flexDirection: 'row' as const,
+      paddingLeft: cfg.expBullet.indent,
+      marginBottom: 0.5,
+    } as React.CSSProperties,
+
+    expBulletDot: {
+      fontSize: `${cfg.expBullet.size}pt`,
+      width: 10,
+      flexShrink: 0,
+    } as React.CSSProperties,
+
+    expBulletText: {
+      fontSize: `${cfg.expBullet.size}pt`,
+      flex: 1,
+      textAlign: cfg.expBullet.align,
+      lineHeight: cfg.expBullet.lineHeight,
+    } as React.CSSProperties,
+
+    // --- Projects ---
+    projRow: {
       marginTop: cfg.projectTitle.spaceBefore,
     } as React.CSSProperties,
 
-    projectName: {
+    projName: {
       fontWeight: cfg.projectTitle.bold ? 'bold' : 'normal',
       fontSize: `${cfg.projectTitle.size}pt`,
     } as React.CSSProperties,
 
-    projectTech: {
+    projTech: {
       fontSize: `${cfg.projectTech.size}pt`,
       fontStyle: cfg.projectTech.italic ? 'italic' : 'normal',
       color: cfg.colors.muted,
     } as React.CSSProperties,
 
-    bulletRow: {
+    projBulletRow: {
       display: 'flex' as const,
       flexDirection: 'row' as const,
-      paddingLeft: cfg.bullet.indent,
+      paddingLeft: cfg.projBullet.indent,
       marginBottom: 0.5,
     } as React.CSSProperties,
 
-    bulletDot: {
-      fontSize: `${body}pt`,
+    projBulletDot: {
+      fontSize: `${cfg.projBullet.size}pt`,
       width: 10,
       flexShrink: 0,
     } as React.CSSProperties,
 
-    bulletText: {
-      fontSize: `${body}pt`,
+    projBulletText: {
+      fontSize: `${cfg.projBullet.size}pt`,
       flex: 1,
-      textAlign: cfg.bullet.align,
-      lineHeight: cfg.bullet.lineHeight,
+      textAlign: cfg.projBullet.align,
+      lineHeight: cfg.projBullet.lineHeight,
     } as React.CSSProperties,
 
+    // --- Education ---
     eduRow: {
       display: 'flex' as const,
       flexDirection: 'row' as const,
@@ -238,23 +290,108 @@ export function buildHtmlStyles(cfg: ResumeStyleConfig) {
       marginTop: 1,
     } as React.CSSProperties,
 
+    eduInstitution: {
+      fontWeight: cfg.education.bold ? 'bold' : 'normal',
+      fontSize: `${cfg.education.size}pt`,
+    } as React.CSSProperties,
+
+    eduDegree: {
+      fontSize: `${cfg.education.size}pt`,
+    } as React.CSSProperties,
+
     eduText: {
-      fontSize: `${body}pt`,
+      fontSize: `${cfg.education.size}pt`,
       flex: 1,
       marginRight: 4,
     } as React.CSSProperties,
 
-    eduBold: {
-      fontWeight: cfg.education.bold ? 'bold' : 'normal',
-    } as React.CSSProperties,
-
     eduDate: {
-      fontSize: `${body}pt`,
+      fontSize: `${cfg.eduDate.size}pt`,
       flexShrink: 0,
       textAlign: 'right' as const,
-      fontStyle: 'italic' as const,
+      fontStyle: cfg.eduDate.italic ? 'italic' : 'normal',
     } as React.CSSProperties,
   }
+}
+
+/**
+ * Section config — maps elementId prefix to the style config keys that control that section.
+ * Used by FormatPanel's Section tab to show relevant controls per section.
+ */
+export interface SectionStyleControl {
+  key: keyof ResumeStyleConfig
+  label: string
+  field: 'size' | 'bold' | 'italic' | 'lineHeight' | 'indent' | 'align'
+  type: 'number' | 'toggle' | 'select'
+  min?: number
+  max?: number
+  step?: number
+  options?: string[]
+}
+
+export const SECTION_CONFIG: Record<string, { label: string; controls: SectionStyleControl[] }> = {
+  header: {
+    label: 'Section Headers',
+    controls: [
+      { key: 'sectionHeader', label: 'Font Size', field: 'size', type: 'number', min: 8, max: 16, step: 0.5 },
+      { key: 'sectionHeader', label: 'Bold', field: 'bold', type: 'toggle' },
+    ],
+  },
+  contact: {
+    label: 'Contact',
+    controls: [
+      { key: 'name', label: 'Name Size', field: 'size', type: 'number', min: 10, max: 24, step: 0.5 },
+      { key: 'name', label: 'Name Bold', field: 'bold', type: 'toggle' },
+      { key: 'contact', label: 'Contact Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+    ],
+  },
+  summary: {
+    label: 'Summary',
+    controls: [
+      { key: 'summaryText', label: 'Font Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'summaryText', label: 'Line Height', field: 'lineHeight', type: 'number', min: 1.0, max: 2.0, step: 0.05 },
+      { key: 'summaryText', label: 'Alignment', field: 'align', type: 'select', options: ['left', 'justify'] },
+    ],
+  },
+  skill: {
+    label: 'Skills',
+    controls: [
+      { key: 'skillLabel', label: 'Label Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'skillLabel', label: 'Label Bold', field: 'bold', type: 'toggle' },
+      { key: 'skillValue', label: 'Value Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+    ],
+  },
+  exp: {
+    label: 'Experience',
+    controls: [
+      { key: 'jobTitle', label: 'Title Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'jobTitle', label: 'Title Bold', field: 'bold', type: 'toggle' },
+      { key: 'expBullet', label: 'Bullet Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'expBullet', label: 'Bullet Line Height', field: 'lineHeight', type: 'number', min: 1.0, max: 2.0, step: 0.05 },
+      { key: 'expBullet', label: 'Bullet Indent', field: 'indent', type: 'number', min: 0, max: 30, step: 1 },
+      { key: 'dates', label: 'Date Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+    ],
+  },
+  proj: {
+    label: 'Projects',
+    controls: [
+      { key: 'projectTitle', label: 'Title Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'projectTitle', label: 'Title Bold', field: 'bold', type: 'toggle' },
+      { key: 'projectTech', label: 'Tech Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'projectTech', label: 'Tech Italic', field: 'italic', type: 'toggle' },
+      { key: 'projBullet', label: 'Bullet Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'projBullet', label: 'Bullet Line Height', field: 'lineHeight', type: 'number', min: 1.0, max: 2.0, step: 0.05 },
+    ],
+  },
+  edu: {
+    label: 'Education',
+    controls: [
+      { key: 'education', label: 'Font Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'education', label: 'Bold', field: 'bold', type: 'toggle' },
+      { key: 'eduDate', label: 'Date Size', field: 'size', type: 'number', min: 7, max: 14, step: 0.5 },
+      { key: 'eduDate', label: 'Date Italic', field: 'italic', type: 'toggle' },
+    ],
+  },
 }
 
 /** Derive a scaled style config — always scales from DEFAULT to avoid floating-point drift */

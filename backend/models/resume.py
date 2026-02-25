@@ -12,6 +12,7 @@ class Profile(BaseModel):
     github: Optional[str] = None
     portfolio: Optional[str] = None
     summary: Optional[str] = None
+    section_headers: Optional[dict] = None
 
 
 class ProfileUpdate(BaseModel):
@@ -23,6 +24,7 @@ class ProfileUpdate(BaseModel):
     github: Optional[str] = None
     portfolio: Optional[str] = None
     summary: Optional[str] = None
+    section_headers: Optional[dict] = None
 
 
 class ExperienceCreate(BaseModel):

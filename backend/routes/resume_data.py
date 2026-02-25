@@ -44,7 +44,14 @@ async def get_profile(session: Session = Depends(get_session)):
     profile = session.get(Profile, 1)
     if not profile:
         return {}
-    return _row_to_dict(profile)
+    d = _row_to_dict(profile)
+    # Parse JSON text column
+    if d.get("section_headers") and isinstance(d["section_headers"], str):
+        try:
+            d["section_headers"] = json.loads(d["section_headers"])
+        except (json.JSONDecodeError, TypeError):
+            d["section_headers"] = None
+    return d
 
 
 @router.put("/profile")
@@ -53,9 +60,18 @@ async def update_profile(data: ProfileUpdate, session: Session = Depends(get_ses
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     for field, val in data.model_dump(exclude_unset=True).items():
+        # Serialize dict fields to JSON text for storage
+        if field == "section_headers" and isinstance(val, dict):
+            val = json.dumps(val)
         setattr(profile, field, val)
     session.commit()
-    return _row_to_dict(profile)
+    d = _row_to_dict(profile)
+    if d.get("section_headers") and isinstance(d["section_headers"], str):
+        try:
+            d["section_headers"] = json.loads(d["section_headers"])
+        except (json.JSONDecodeError, TypeError):
+            d["section_headers"] = None
+    return d
 
 
 # --- Experiences ---

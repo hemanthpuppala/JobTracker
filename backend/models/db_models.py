@@ -22,6 +22,7 @@ class Profile(Base):
     github = Column(Text)
     portfolio = Column(Text)
     summary = Column(Text)
+    section_headers = Column(Text)  # JSON: {"summary":"Professional Summary","skills":"Technical Skills",...}
 
 
 class Job(Base):
