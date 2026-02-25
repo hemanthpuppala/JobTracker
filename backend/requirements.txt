@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+python-docx
+python-multipart
+sqlalchemy
+alembic
