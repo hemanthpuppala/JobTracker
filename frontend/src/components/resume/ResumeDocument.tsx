@@ -19,12 +19,13 @@ import type {
   SkillItem,
   EducationItem,
   ElementStyleOverride,
+  ResumeSection,
+  CustomSectionData,
 } from '../../lib/resumeStore'
 import { resolveElementStylePdf } from '../../lib/resumeStore'
 import { richTextToPdfNodes, hasRichFormatting } from '../../lib/richTextToPdf'
 
 // Map config font names to @react-pdf/renderer built-in fonts.
-// To use actual Calibri, register .ttf files and update this map.
 const FONT_MAP: Record<string, string> = {
   'Calibri': 'Helvetica',
   'Helvetica': 'Helvetica',
@@ -102,6 +103,8 @@ export interface ResumeDocumentProps {
   richContent?: Record<string, any>
   elementStyles?: Record<string, ElementStyleOverride>
   sectionHeaders?: Record<string, string>
+  sections?: ResumeSection[]
+  customSections?: Record<string, CustomSectionData>
 }
 
 // --- Reusable components ---
@@ -130,6 +133,15 @@ function Bullet({ text, richJson, elStyleOverride, rowStyle, dotStyle, textStyle
   )
 }
 
+// Default sections for backwards compat
+const DEFAULT_SECTION_ORDER: ResumeSection[] = [
+  { id: 'summary',    type: 'summary',    order: 0, visible: true, header: 'Professional Summary' },
+  { id: 'skills',     type: 'skills',     order: 1, visible: true, header: 'Technical Skills' },
+  { id: 'experience', type: 'experience', order: 2, visible: true, header: 'Professional Experience' },
+  { id: 'projects',   type: 'projects',   order: 3, visible: true, header: 'Key Projects' },
+  { id: 'education',  type: 'education',  order: 4, visible: true, header: 'Education' },
+]
+
 // --- Main Document ---
 export default function ResumeDocument({
   contact,
@@ -142,6 +154,8 @@ export default function ResumeDocument({
   richContent = {},
   elementStyles = {},
   sectionHeaders = {},
+  sections: sectionsProp,
+  customSections = {},
 }: ResumeDocumentProps) {
   const s = buildStyles(styleConfig)
   const pageSize = PAGE_SIZES[styleConfig.page]
@@ -158,44 +172,51 @@ export default function ResumeDocument({
   const incSkill = skills.filter(sk => sk.included)
   const incEdu = education.filter(e => e.included)
 
-  return (
-    <Document>
-      <Page size={{ width: pageSize.width, height: pageSize.height }} style={s.page}>
-        {/* ── Name + Contact ── */}
-        <View style={s.headerBlock}>
-          <Text style={[s.name, resolveElementStylePdf(elementStyles['contact-name'])]}>{contact.fullName}</Text>
-          {contactLine && <Text style={s.contact}>{contactLine}</Text>}
-        </View>
+  const activeSections = (sectionsProp || DEFAULT_SECTION_ORDER)
+    .filter(sec => sec.visible)
+    .sort((a, b) => a.order - b.order)
 
-        {/* ── Professional Summary ── */}
-        {summary && (
-          <>
-            <SectionHeader title={sectionHeaders.summary || 'Professional Summary'} s={s} />
+  // react-pdf's reconciler doesn't handle child reordering properly —
+  // it appends new nodes instead of moving existing ones.
+  // A unique key forces a full rebuild when section order/visibility changes.
+  const sectionLayoutKey = activeSections.map(s => s.id).join('|')
+
+  function renderSection(section: ResumeSection) {
+    const headerText = sectionHeaders[section.id] || section.header
+
+    switch (section.type) {
+      case 'summary':
+        if (!summary) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             <Text style={[s.summary, resolveElementStylePdf(elementStyles['summary'])]}>
               {richContent['summary'] && hasRichFormatting(richContent['summary'])
                 ? richTextToPdfNodes(richContent['summary'])
                 : summary}
             </Text>
-          </>
-        )}
+          </View>
+        )
 
-        {/* ── Technical Skills ── */}
-        {incSkill.length > 0 && (
-          <>
-            <SectionHeader title={sectionHeaders.skills || 'Technical Skills'} s={s} />
+      case 'skills':
+        if (incSkill.length === 0) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             {incSkill.map(sk => (
               <Text key={sk.id} style={s.skillParagraph}>
                 <Text style={{ fontWeight: styleConfig.skillLabel.bold ? 'bold' : 'normal', fontSize: styleConfig.skillLabel.size, ...resolveElementStylePdf(elementStyles[`skill-${sk.id}-category`]) }}>{sk.category}: </Text>
                 <Text style={resolveElementStylePdf(elementStyles[`skill-${sk.id}-items`])}>{sk.items}</Text>
               </Text>
             ))}
-          </>
-        )}
+          </View>
+        )
 
-        {/* ── Professional Experience ── */}
-        {incExp.length > 0 && (
-          <>
-            <SectionHeader title={sectionHeaders.experience || 'Professional Experience'} s={s} />
+      case 'experience':
+        if (incExp.length === 0) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             {incExp.map(exp => (
               <View key={exp.id} wrap={false}>
                 <View style={s.expTitleDateRow}>
@@ -212,13 +233,14 @@ export default function ResumeDocument({
                 ))}
               </View>
             ))}
-          </>
-        )}
+          </View>
+        )
 
-        {/* ── Key Projects ── */}
-        {incProj.length > 0 && (
-          <>
-            <SectionHeader title={sectionHeaders.projects || 'Key Projects'} s={s} />
+      case 'projects':
+        if (incProj.length === 0) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             {incProj.map(proj => (
               <View key={proj.id} wrap={false}>
                 <Text style={{ marginTop: styleConfig.projectTitle.spaceBefore }}>
@@ -230,13 +252,14 @@ export default function ResumeDocument({
                 ))}
               </View>
             ))}
-          </>
-        )}
+          </View>
+        )
 
-        {/* ── Education ── */}
-        {incEdu.length > 0 && (
-          <>
-            <SectionHeader title={sectionHeaders.education || 'Education'} s={s} />
+      case 'education':
+        if (incEdu.length === 0) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             {incEdu.map(edu => (
               <View key={edu.id} style={s.eduRow}>
                 <Text style={s.eduText}>
@@ -246,8 +269,53 @@ export default function ResumeDocument({
                 <Text style={[s.eduDate, resolveElementStylePdf(elementStyles[`edu-${edu.id}-date`])]}>{edu.dateStart} - {edu.dateEnd}</Text>
               </View>
             ))}
-          </>
-        )}
+          </View>
+        )
+
+      case 'custom': {
+        const customData = customSections[section.id]
+        if (!customData) return null
+        const items = customData.items.filter(i => i.included)
+        if (items.length === 0) return null
+
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
+            {section.layout === 'text' && items[0] && (
+              <Text style={s.summary}>{items[0].text}</Text>
+            )}
+            {section.layout === 'keyvalue' && items.map((item, i) => (
+              <Text key={item.id} style={s.skillParagraph}>
+                <Text style={{ fontWeight: 'bold', fontSize: styleConfig.skillLabel.size }}>{item.label || ''}: </Text>
+                <Text>{item.text}</Text>
+              </Text>
+            ))}
+            {section.layout === 'bullets' && items.map((item, i) => (
+              <View key={item.id} style={s.expBulletRow}>
+                <Text style={s.expBulletDot}>{'\u2022'}</Text>
+                <Text style={s.expBulletText}>{item.text}</Text>
+              </View>
+            ))}
+          </View>
+        )
+      }
+
+      default:
+        return null
+    }
+  }
+
+  return (
+    <Document>
+      <Page key={sectionLayoutKey} size={{ width: pageSize.width, height: pageSize.height }} style={s.page}>
+        {/* ── Name + Contact ── */}
+        <View style={s.headerBlock}>
+          <Text style={[s.name, resolveElementStylePdf(elementStyles['contact-name'])]}>{contact.fullName}</Text>
+          {contactLine && <Text style={s.contact}>{contactLine}</Text>}
+        </View>
+
+        {/* ── Dynamic sections ── */}
+        {activeSections.map(section => renderSection(section))}
       </Page>
     </Document>
   )

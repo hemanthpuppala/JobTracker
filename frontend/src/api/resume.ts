@@ -1,4 +1,4 @@
-import type { Profile, Experience, Project, Skill, Education, GeneratedResume, ResumeGenerateRequest } from '../types/resume'
+import type { Profile, Experience, Project, Skill, Education, GeneratedResume, ResumeGenerateRequest, CustomSection } from '../types/resume'
 
 const API = ''
 
@@ -23,6 +23,7 @@ export const experiencesApi = crud<Experience>('/api/resume/experiences')
 export const projectsApi = crud<Project>('/api/resume/projects')
 export const skillsApi = crud<Skill>('/api/resume/skills')
 export const educationApi = crud<Education>('/api/resume/education')
+export const customSectionsApi = crud<CustomSection>('/api/resume/custom-sections')
 
 // Resume generation
 export const generateResume = (data: ResumeGenerateRequest): Promise<GeneratedResume> =>

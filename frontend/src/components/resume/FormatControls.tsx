@@ -146,6 +146,7 @@ export function SectionControl({ ctrl, styles, updateStyleKey }: {
 export function SectionControls({ section }: { section: string }) {
   const styles = useResumeBuilderStore(s => s.styles)
   const updateStyleKey = useResumeBuilderStore(s => s.updateStyleKey)
+  const resetSectionStyles = useResumeBuilderStore(s => s.resetSectionStyles)
   const sectionCfg = SECTION_CONFIG[section]
   if (!sectionCfg) return null
 
@@ -158,6 +159,12 @@ export function SectionControls({ section }: { section: string }) {
       {sectionCfg.controls.map((ctrl, i) => (
         <SectionControl key={`${ctrl.key}-${ctrl.field}-${i}`} ctrl={ctrl} styles={styles} updateStyleKey={updateStyleKey} />
       ))}
+      <button
+        onClick={() => resetSectionStyles(section)}
+        className="w-full text-[0.6rem] text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded py-1 cursor-pointer transition-colors"
+      >
+        Reset section to defaults
+      </button>
     </div>
   )
 }

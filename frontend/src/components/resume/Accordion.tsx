@@ -5,14 +5,16 @@ interface Props {
   title: string
   defaultOpen?: boolean
   badge?: string | number
+  dimmed?: boolean
+  titleRight?: React.ReactNode
   children: React.ReactNode
 }
 
-export default function Accordion({ title, defaultOpen = false, badge, children }: Props) {
+export default function Accordion({ title, defaultOpen = false, badge, dimmed, titleRight, children }: Props) {
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="border-b border-border">
+    <div className={cn('border-b border-border', dimmed && 'opacity-50')}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -34,6 +36,11 @@ export default function Accordion({ title, defaultOpen = false, badge, children 
             <span className="px-1.5 py-0.5 text-[0.65rem] rounded bg-surface3 text-text2">{badge}</span>
           )}
         </span>
+        {titleRight && (
+          <span onClick={e => e.stopPropagation()} className="flex items-center">
+            {titleRight}
+          </span>
+        )}
       </button>
       <div className={cn(
         'overflow-hidden transition-all duration-200',

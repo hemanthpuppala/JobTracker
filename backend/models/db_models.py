@@ -23,6 +23,34 @@ class Profile(Base):
     portfolio = Column(Text)
     summary = Column(Text)
     section_headers = Column(Text)  # JSON: {"summary":"Professional Summary","skills":"Technical Skills",...}
+    section_order = Column(Text)  # JSON: [{"id":"summary","visible":true},...]
+
+
+class CustomSection(Base):
+    __tablename__ = "custom_sections"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    section_id = Column(Text, nullable=False, unique=True)  # 'custom-1'
+    header = Column(Text, nullable=False)
+    layout = Column(Text, nullable=False, default='bullets')  # bullets | keyvalue | text
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    items = relationship(
+        "CustomSectionItem", back_populates="section",
+        cascade="all, delete-orphan", order_by="CustomSectionItem.sort_order",
+    )
+
+
+class CustomSectionItem(Base):
+    __tablename__ = "custom_section_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    section_id = Column(Integer, ForeignKey("custom_sections.id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    label = Column(Text)  # for keyvalue layout
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    section = relationship("CustomSection", back_populates="items")
 
 
 class Job(Base):

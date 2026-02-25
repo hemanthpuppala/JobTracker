@@ -9,6 +9,7 @@ import {
   scaleStyles,
   type ResumeStyleConfig,
 } from './resumeStyles'
+import type { CustomLayout } from './resumeSectionPresets'
 
 // --- Data types for resume content ---
 
@@ -57,6 +58,38 @@ export interface EducationItem {
   included: boolean
 }
 
+// --- Section array types ---
+export type SectionType = 'summary' | 'skills' | 'experience' | 'projects' | 'education' | 'custom'
+
+export interface ResumeSection {
+  id: string              // 'summary', 'experience', 'custom-1', etc.
+  type: SectionType
+  order: number
+  visible: boolean
+  header: string          // editable section header
+  layout?: CustomLayout   // only for type='custom'
+}
+
+export interface CustomSectionItem {
+  id: number
+  text: string
+  label?: string        // key for keyvalue layout
+  included: boolean
+}
+
+export interface CustomSectionData {
+  items: CustomSectionItem[]
+  dbId?: number         // DB primary key for CRUD
+}
+
+export const DEFAULT_SECTIONS: ResumeSection[] = [
+  { id: 'summary',    type: 'summary',    order: 0, visible: true, header: 'Professional Summary' },
+  { id: 'skills',     type: 'skills',     order: 1, visible: true, header: 'Technical Skills' },
+  { id: 'experience', type: 'experience', order: 2, visible: true, header: 'Professional Experience' },
+  { id: 'projects',   type: 'projects',   order: 3, visible: true, header: 'Key Projects' },
+  { id: 'education',  type: 'education',  order: 4, visible: true, header: 'Education' },
+]
+
 export type EditorMode = 'form' | 'interactive'
 
 export interface ElementStyleOverride {
@@ -92,6 +125,22 @@ export function resolveElementStylePdf(
   return s
 }
 
+/** Snapshot of undoable state (content + formatting, not UI) */
+export interface UndoableSnapshot {
+  contact: ContactInfo
+  summary: string
+  experiences: ExperienceItem[]
+  projects: ProjectItem[]
+  skills: SkillItem[]
+  education: EducationItem[]
+  sectionHeaders: Record<string, string>
+  sections: ResumeSection[]
+  customSections: Record<string, CustomSectionData>
+  styles: ResumeStyleConfig
+  elementStyles: Record<string, ElementStyleOverride>
+  richContent: Record<string, any>
+}
+
 export interface ResumeBuilderState {
   // Content
   contact: ContactInfo
@@ -101,6 +150,8 @@ export interface ResumeBuilderState {
   skills: SkillItem[]
   education: EducationItem[]
   sectionHeaders: Record<string, string>
+  sections: ResumeSection[]
+  customSections: Record<string, CustomSectionData>
 
   // Style
   styles: ResumeStyleConfig
@@ -115,10 +166,26 @@ export interface ResumeBuilderState {
   // Rich text content — TipTap JSON per element ID (e.g. 'exp-3-bullet-1')
   richContent: Record<string, any>
 
+  // Undo / redo history
+  _history: UndoableSnapshot[]
+  _future: UndoableSnapshot[]
+  _lastSnapshotTime: number
+
   // Actions — content
   setContact: (c: Partial<ContactInfo>) => void
   setSummary: (s: string) => void
   setSectionHeader: (key: string, value: string) => void
+
+  // Actions — sections
+  moveSection: (id: string, direction: 'up' | 'down') => void
+  reorderSections: (ids: string[]) => void
+  toggleSectionVisible: (id: string) => void
+  removeSection: (id: string) => void
+  addSection: (preset: { id: string; header: string; layout: CustomLayout }) => void
+  addCustomItem: (sectionId: string) => void
+  updateCustomItem: (sectionId: string, itemId: number, data: Partial<CustomSectionItem>) => void
+  removeCustomItem: (sectionId: string, itemId: number) => void
+  toggleCustomItem: (sectionId: string, itemId: number) => void
 
   setExperiences: (exps: ExperienceItem[]) => void
   updateExperience: (id: number, data: Partial<ExperienceItem>) => void
@@ -157,6 +224,14 @@ export interface ResumeBuilderState {
   setPageSize: (page: 'A4' | 'LETTER') => void
   updateStyleKey: <K extends keyof ResumeStyleConfig>(key: K, value: Partial<ResumeStyleConfig[K]>) => void
 
+  // Actions — undo / redo / reset
+  undo: () => void
+  redo: () => void
+  canUndo: () => boolean
+  canRedo: () => boolean
+  resetSectionStyles: (section: string) => void
+  resetAllFormatting: () => void
+
   // Actions — lifecycle
   setLoaded: (v: boolean) => void
   markClean: () => void
@@ -168,6 +243,7 @@ export interface ResumeBuilderState {
     projects: any[]
     skills: any[]
     education: any[]
+    customSections?: any[]
   }) => void
 }
 
@@ -198,7 +274,57 @@ function updateById<T extends { id: number }>(arr: T[], id: number, data: Partia
   return arr.map(item => item.id === id ? { ...item, ...data } : item)
 }
 
-export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
+// --- Snapshot helpers for undo/redo ---
+
+const HISTORY_LIMIT = 50
+const DEBOUNCE_MS = 500
+
+function extractSnapshot(s: ResumeBuilderState): UndoableSnapshot {
+  return {
+    contact: s.contact,
+    summary: s.summary,
+    experiences: s.experiences,
+    projects: s.projects,
+    skills: s.skills,
+    education: s.education,
+    sectionHeaders: s.sectionHeaders,
+    sections: s.sections,
+    customSections: s.customSections,
+    styles: s.styles,
+    elementStyles: s.elementStyles,
+    richContent: s.richContent,
+  }
+}
+
+function applySnapshot(snapshot: UndoableSnapshot): Partial<ResumeBuilderState> {
+  return { ...snapshot, dirty: true }
+}
+
+/** Maps section prefix → style keys that belong to that section */
+const SECTION_STYLE_KEYS: Record<string, (keyof ResumeStyleConfig)[]> = {
+  contact: ['name', 'contact'],
+  summary: ['summaryText'],
+  skill: ['skillLabel', 'skillValue'],
+  exp: ['jobTitle', 'expBullet', 'dates'],
+  proj: ['projectTitle', 'projectTech', 'projBullet'],
+  edu: ['education', 'eduDate'],
+  header: ['sectionHeader'],
+}
+
+export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => {
+  /** Push current state to history (debounced — skips if < DEBOUNCE_MS since last push) */
+  function pushHistory(force?: boolean) {
+    const s = get()
+    const now = Date.now()
+    if (!force && now - s._lastSnapshotTime < DEBOUNCE_MS) return
+    set({
+      _history: [...s._history.slice(-(HISTORY_LIMIT - 1)), extractSnapshot(s)],
+      _future: [],
+      _lastSnapshotTime: now,
+    })
+  }
+
+  return {
   contact: { fullName: '', location: '', phone: '', email: '', linkedin: '', github: '', portfolio: '' },
   summary: '',
   experiences: [],
@@ -212,6 +338,8 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
     projects: 'Key Projects',
     education: 'Education',
   },
+  sections: [...DEFAULT_SECTIONS],
+  customSections: {},
   styles: { ...DEFAULT_RESUME_STYLES },
   loaded: false,
   dirty: false,
@@ -219,107 +347,215 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
   selectedElementId: null,
   elementStyles: {},
   richContent: {},
+  _history: [],
+  _future: [],
+  _lastSnapshotTime: 0,
 
   // --- Contact ---
-  setContact: (c) => set(s => ({ contact: { ...s.contact, ...c }, dirty: true })),
-  setSummary: (summary) => set({ summary, dirty: true }),
-  setSectionHeader: (key, value) => set(s => ({ sectionHeaders: { ...s.sectionHeaders, [key]: value }, dirty: true })),
+  setContact: (c) => { pushHistory(); set(s => ({ contact: { ...s.contact, ...c }, dirty: true })) },
+  setSummary: (summary) => { pushHistory(); set({ summary, dirty: true }) },
+  setSectionHeader: (key, value) => { pushHistory(); set(s => ({
+    sectionHeaders: { ...s.sectionHeaders, [key]: value },
+    sections: s.sections.map(sec => sec.id === key ? { ...sec, header: value } : sec),
+    dirty: true,
+  })) },
+
+  // --- Sections ---
+  moveSection: (id, direction) => { pushHistory(true); set(s => {
+    const sorted = [...s.sections].sort((a, b) => a.order - b.order)
+    const idx = sorted.findIndex(sec => sec.id === id)
+    if (idx < 0) return s
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= sorted.length) return s
+    const newSections = sorted.map((sec, i) => {
+      if (i === idx) return { ...sec, order: swapIdx }
+      if (i === swapIdx) return { ...sec, order: idx }
+      return { ...sec, order: i }
+    })
+    return { sections: newSections, dirty: true }
+  }) },
+  reorderSections: (ids) => { pushHistory(true); set(s => ({
+    sections: s.sections.map(sec => {
+      const newOrder = ids.indexOf(sec.id)
+      return newOrder >= 0 ? { ...sec, order: newOrder } : sec
+    }),
+    dirty: true,
+  })) },
+  toggleSectionVisible: (id) => { pushHistory(true); set(s => ({
+    sections: s.sections.map(sec => sec.id === id ? { ...sec, visible: !sec.visible } : sec),
+    dirty: true,
+  })) },
+  removeSection: (id) => { pushHistory(true); set(s => {
+    const newSections = s.sections.filter(sec => sec.id !== id)
+    const newCustom = { ...s.customSections }
+    delete newCustom[id]
+    return { sections: newSections, customSections: newCustom, dirty: true }
+  }) },
+  addSection: (preset) => { pushHistory(true); set(s => {
+    // Generate unique id for custom sections
+    const existingCustomIds = s.sections.filter(sec => sec.type === 'custom').map(sec => sec.id)
+    let sectionId = preset.id
+    if (existingCustomIds.includes(sectionId) || s.sections.some(sec => sec.id === sectionId)) {
+      let counter = 1
+      while (s.sections.some(sec => sec.id === `${preset.id}-${counter}`)) counter++
+      sectionId = `${preset.id}-${counter}`
+    }
+    const maxOrder = Math.max(...s.sections.map(sec => sec.order), -1)
+    const newSection: ResumeSection = {
+      id: sectionId,
+      type: 'custom',
+      order: maxOrder + 1,
+      visible: true,
+      header: preset.header,
+      layout: preset.layout,
+    }
+    return {
+      sections: [...s.sections, newSection],
+      customSections: { ...s.customSections, [sectionId]: { items: [] } },
+      dirty: true,
+    }
+  }) },
+  addCustomItem: (sectionId) => { pushHistory(true); set(s => {
+    const section = s.customSections[sectionId]
+    if (!section) return s
+    const maxId = section.items.reduce((max, it) => Math.max(max, it.id), 0)
+    return {
+      customSections: {
+        ...s.customSections,
+        [sectionId]: { ...section, items: [...section.items, { id: maxId + 1, text: '', included: true }] },
+      },
+      dirty: true,
+    }
+  }) },
+  updateCustomItem: (sectionId, itemId, data) => { pushHistory(); set(s => {
+    const section = s.customSections[sectionId]
+    if (!section) return s
+    return {
+      customSections: {
+        ...s.customSections,
+        [sectionId]: { ...section, items: section.items.map(it => it.id === itemId ? { ...it, ...data } : it) },
+      },
+      dirty: true,
+    }
+  }) },
+  removeCustomItem: (sectionId, itemId) => { pushHistory(true); set(s => {
+    const section = s.customSections[sectionId]
+    if (!section) return s
+    return {
+      customSections: {
+        ...s.customSections,
+        [sectionId]: { ...section, items: section.items.filter(it => it.id !== itemId) },
+      },
+      dirty: true,
+    }
+  }) },
+  toggleCustomItem: (sectionId, itemId) => { pushHistory(true); set(s => {
+    const section = s.customSections[sectionId]
+    if (!section) return s
+    return {
+      customSections: {
+        ...s.customSections,
+        [sectionId]: { ...section, items: section.items.map(it => it.id === itemId ? { ...it, included: !it.included } : it) },
+      },
+      dirty: true,
+    }
+  }) },
 
   // --- Experiences ---
   setExperiences: (experiences) => set({ experiences }),
-  updateExperience: (id, data) => set(s => ({
+  updateExperience: (id, data) => { pushHistory(); set(s => ({
     experiences: updateById(s.experiences, id, data), dirty: true,
-  })),
-  toggleExperience: (id) => set(s => ({
+  })) },
+  toggleExperience: (id) => { pushHistory(true); set(s => ({
     experiences: s.experiences.map(e => e.id === id ? { ...e, included: !e.included } : e), dirty: true,
-  })),
-  addExperienceBullet: (id) => set(s => ({
+  })) },
+  addExperienceBullet: (id) => { pushHistory(true); set(s => ({
     experiences: s.experiences.map(e =>
       e.id === id ? { ...e, bullets: [...e.bullets, ''] } : e
     ), dirty: true,
-  })),
-  updateExperienceBullet: (id, bulletIdx, text) => set(s => ({
+  })) },
+  updateExperienceBullet: (id, bulletIdx, text) => { pushHistory(); set(s => ({
     experiences: s.experiences.map(e =>
       e.id === id ? { ...e, bullets: e.bullets.map((b, i) => i === bulletIdx ? text : b) } : e
     ), dirty: true,
-  })),
-  removeExperienceBullet: (id, bulletIdx) => set(s => ({
+  })) },
+  removeExperienceBullet: (id, bulletIdx) => { pushHistory(true); set(s => ({
     experiences: s.experiences.map(e =>
       e.id === id ? { ...e, bullets: e.bullets.filter((_, i) => i !== bulletIdx) } : e
     ), dirty: true,
-  })),
+  })) },
 
   // --- Projects ---
   setProjects: (projects) => set({ projects }),
-  updateProject: (id, data) => set(s => ({
+  updateProject: (id, data) => { pushHistory(); set(s => ({
     projects: updateById(s.projects, id, data), dirty: true,
-  })),
-  toggleProject: (id) => set(s => ({
+  })) },
+  toggleProject: (id) => { pushHistory(true); set(s => ({
     projects: s.projects.map(p => p.id === id ? { ...p, included: !p.included } : p), dirty: true,
-  })),
-  addProjectBullet: (id) => set(s => ({
+  })) },
+  addProjectBullet: (id) => { pushHistory(true); set(s => ({
     projects: s.projects.map(p =>
       p.id === id ? { ...p, bullets: [...p.bullets, ''] } : p
     ), dirty: true,
-  })),
-  updateProjectBullet: (id, bulletIdx, text) => set(s => ({
+  })) },
+  updateProjectBullet: (id, bulletIdx, text) => { pushHistory(); set(s => ({
     projects: s.projects.map(p =>
       p.id === id ? { ...p, bullets: p.bullets.map((b, i) => i === bulletIdx ? text : b) } : p
     ), dirty: true,
-  })),
-  removeProjectBullet: (id, bulletIdx) => set(s => ({
+  })) },
+  removeProjectBullet: (id, bulletIdx) => { pushHistory(true); set(s => ({
     projects: s.projects.map(p =>
       p.id === id ? { ...p, bullets: p.bullets.filter((_, i) => i !== bulletIdx) } : p
     ), dirty: true,
-  })),
+  })) },
 
   // --- Skills ---
   setSkills: (skills) => set({ skills }),
-  updateSkill: (id, data) => set(s => ({
+  updateSkill: (id, data) => { pushHistory(); set(s => ({
     skills: updateById(s.skills, id, data), dirty: true,
-  })),
-  toggleSkill: (id) => set(s => ({
+  })) },
+  toggleSkill: (id) => { pushHistory(true); set(s => ({
     skills: s.skills.map(sk => sk.id === id ? { ...sk, included: !sk.included } : sk), dirty: true,
-  })),
-  addSkill: () => set(s => {
+  })) },
+  addSkill: () => { pushHistory(true); set(s => {
     const maxId = s.skills.reduce((max, sk) => Math.max(max, sk.id), 0)
     return {
       skills: [...s.skills, { id: maxId + 1, category: '', items: '', included: true }],
       dirty: true,
     }
-  }),
-  removeSkill: (id) => set(s => ({
+  }) },
+  removeSkill: (id) => { pushHistory(true); set(s => ({
     skills: s.skills.filter(sk => sk.id !== id), dirty: true,
-  })),
+  })) },
 
   // --- Education ---
   setEducation: (education) => set({ education }),
-  updateEducation: (id, data) => set(s => ({
+  updateEducation: (id, data) => { pushHistory(); set(s => ({
     education: updateById(s.education, id, data), dirty: true,
-  })),
-  toggleEducation: (id) => set(s => ({
+  })) },
+  toggleEducation: (id) => { pushHistory(true); set(s => ({
     education: s.education.map(e => e.id === id ? { ...e, included: !e.included } : e), dirty: true,
-  })),
+  })) },
 
   // --- Mode ---
   setMode: (mode) => set({ mode }),
   setSelectedElement: (selectedElementId) => set({ selectedElementId }),
-  setElementStyle: (id, style) => set(s => ({
+  setElementStyle: (id, style) => { pushHistory(); set(s => ({
     elementStyles: { ...s.elementStyles, [id]: { ...s.elementStyles[id], ...style } },
     dirty: true,
-  })),
+  })) },
   setRichContent: (elementId, json) => set(s => ({
     richContent: { ...s.richContent, [elementId]: json },
   })),
 
   // --- Styles ---
-  setFont: (font) => set(s => ({ styles: { ...s.styles, font }, dirty: true })),
-  setBaseFontSize: (size) => set(s => ({ styles: scaleStyles(s.styles, size), dirty: true })),
-  setMarginPreset: (preset) => set(s => ({
+  setFont: (font) => { pushHistory(true); set(s => ({ styles: { ...s.styles, font }, dirty: true })) },
+  setBaseFontSize: (size) => { pushHistory(true); set(s => ({ styles: scaleStyles(s.styles, size), dirty: true })) },
+  setMarginPreset: (preset) => { pushHistory(true); set(s => ({
     styles: { ...s.styles, margins: { ...MARGIN_PRESETS[preset] } }, dirty: true,
-  })),
-  setPageSize: (page) => set(s => ({ styles: { ...s.styles, page }, dirty: true })),
-  updateStyleKey: (key, value) => set(s => ({
+  })) },
+  setPageSize: (page) => { pushHistory(true); set(s => ({ styles: { ...s.styles, page }, dirty: true })) },
+  updateStyleKey: (key, value) => { pushHistory(); set(s => ({
     styles: {
       ...s.styles,
       [key]: typeof s.styles[key] === 'object' && typeof value === 'object'
@@ -327,14 +563,133 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
         : value,
     },
     dirty: true,
-  })),
+  })) },
+
+  // --- Undo / Redo ---
+  undo: () => {
+    const s = get()
+    if (s._history.length === 0) return
+    const prev = s._history[s._history.length - 1]
+    set({
+      ...applySnapshot(prev),
+      _history: s._history.slice(0, -1),
+      _future: [extractSnapshot(s), ...s._future.slice(0, HISTORY_LIMIT - 1)],
+      _lastSnapshotTime: Date.now(),
+    })
+  },
+  redo: () => {
+    const s = get()
+    if (s._future.length === 0) return
+    const next = s._future[0]
+    set({
+      ...applySnapshot(next),
+      _history: [...s._history.slice(-(HISTORY_LIMIT - 1)), extractSnapshot(s)],
+      _future: s._future.slice(1),
+      _lastSnapshotTime: Date.now(),
+    })
+  },
+  canUndo: () => get()._history.length > 0,
+  canRedo: () => get()._future.length > 0,
+
+  // --- Reset ---
+  resetSectionStyles: (section) => {
+    pushHistory(true)
+    const keys = SECTION_STYLE_KEYS[section]
+    if (!keys) return
+    set(s => {
+      const newStyles = { ...s.styles }
+      for (const k of keys) {
+        (newStyles as any)[k] = { ...(DEFAULT_RESUME_STYLES as any)[k] }
+      }
+      // Also clear element-level overrides for this section
+      const newElementStyles = { ...s.elementStyles }
+      for (const elId of Object.keys(newElementStyles)) {
+        if (elId.startsWith(section + '-') || elId === section) {
+          delete newElementStyles[elId]
+        }
+      }
+      return { styles: newStyles, elementStyles: newElementStyles, dirty: true }
+    })
+  },
+  resetAllFormatting: () => {
+    pushHistory(true)
+    set({ styles: { ...DEFAULT_RESUME_STYLES }, elementStyles: {}, dirty: true })
+  },
 
   // --- Lifecycle ---
   setLoaded: (loaded) => set({ loaded }),
   markClean: () => set({ dirty: false }),
 
   // --- Hydrate from API ---
-  hydrateFromAPI: ({ profile, experiences, projects, skills, education }) => {
+  hydrateFromAPI: ({ profile, experiences, projects, skills, education, customSections: apiCustomSections }) => {
+    const sectionHeaders: Record<string, string> = {
+      summary: 'Professional Summary',
+      skills: 'Technical Skills',
+      experience: 'Professional Experience',
+      projects: 'Key Projects',
+      education: 'Education',
+      ...(profile.section_headers || {}),
+    }
+
+    // Build sections array from section_order or defaults
+    let sections: ResumeSection[]
+    const sectionOrder: Array<{ id: string; visible: boolean }> | null = profile.section_order || null
+    if (sectionOrder && sectionOrder.length > 0) {
+      sections = sectionOrder.map((entry, i) => {
+        const defaultSec = DEFAULT_SECTIONS.find(d => d.id === entry.id)
+        if (defaultSec) {
+          return { ...defaultSec, order: i, visible: entry.visible, header: sectionHeaders[entry.id] || defaultSec.header }
+        }
+        // Custom section
+        const apiCs = apiCustomSections?.find((cs: any) => cs.section_id === entry.id)
+        return {
+          id: entry.id,
+          type: 'custom' as SectionType,
+          order: i,
+          visible: entry.visible,
+          header: apiCs?.header || entry.id,
+          layout: (apiCs?.layout || 'bullets') as CustomLayout,
+        }
+      })
+      // Add any default sections missing from section_order
+      for (const def of DEFAULT_SECTIONS) {
+        if (!sections.find(s => s.id === def.id)) {
+          sections.push({ ...def, order: sections.length, header: sectionHeaders[def.id] || def.header })
+        }
+      }
+    } else {
+      sections = DEFAULT_SECTIONS.map(d => ({ ...d, header: sectionHeaders[d.id] || d.header }))
+      // Add custom sections from DB
+      if (apiCustomSections) {
+        for (const cs of apiCustomSections) {
+          sections.push({
+            id: cs.section_id,
+            type: 'custom',
+            order: sections.length,
+            visible: true,
+            header: cs.header,
+            layout: cs.layout as CustomLayout,
+          })
+        }
+      }
+    }
+
+    // Build customSections data
+    const customSections: Record<string, CustomSectionData> = {}
+    if (apiCustomSections) {
+      for (const cs of apiCustomSections) {
+        customSections[cs.section_id] = {
+          dbId: cs.id,
+          items: (cs.items || []).map((item: any) => ({
+            id: item.id,
+            text: item.text,
+            label: item.label || undefined,
+            included: true,
+          })),
+        }
+      }
+    }
+
     set({
       contact: {
         fullName: profile.full_name || '',
@@ -346,14 +701,9 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
         portfolio: profile.portfolio || '',
       },
       summary: profile.summary || '',
-      sectionHeaders: {
-        summary: 'Professional Summary',
-        skills: 'Technical Skills',
-        experience: 'Professional Experience',
-        projects: 'Key Projects',
-        education: 'Education',
-        ...(profile.section_headers || {}),
-      },
+      sectionHeaders,
+      sections,
+      customSections,
       experiences: experiences.map(e => ({
         id: e.id,
         company: e.company,
@@ -387,6 +737,10 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
       })),
       loaded: true,
       dirty: false,
+      _history: [],
+      _future: [],
+      _lastSnapshotTime: 0,
     })
   },
-}))
+}
+})

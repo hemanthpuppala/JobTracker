@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { pdf } from '@react-pdf/renderer'
 import { useResumeBuilderStore } from '../lib/resumeStore'
 import { FONT_OPTIONS, MARGIN_PRESETS } from '../lib/resumeStyles'
-import { getProfile, experiencesApi, projectsApi, skillsApi, educationApi, updateProfile } from '../api/resume'
+import { getProfile, experiencesApi, projectsApi, skillsApi, educationApi, customSectionsApi, updateProfile } from '../api/resume'
 import ResumeForm from '../components/resume/ResumeForm'
 import InteractiveEditor from '../components/resume/InteractiveEditor'
 import ResumePreview from '../components/resume/ResumePreview'
@@ -20,14 +20,15 @@ export default function ResumeBuilderPage() {
   useEffect(() => {
     if (store.loaded) return
     async function load() {
-      const [profile, experiences, projects, skills, education] = await Promise.all([
+      const [profile, experiences, projects, skills, education, customSections] = await Promise.all([
         getProfile(),
         experiencesApi.list(),
         projectsApi.list(),
         skillsApi.list(),
         educationApi.list(),
+        customSectionsApi.list(),
       ])
-      store.hydrateFromAPI({ profile, experiences, projects, skills, education })
+      store.hydrateFromAPI({ profile, experiences, projects, skills, education, customSections })
     }
     load()
   }, [store.loaded])
@@ -35,7 +36,12 @@ export default function ResumeBuilderPage() {
   // Save to DB
   const handleSave = useCallback(async () => {
     try {
-      const { contact, summary, sectionHeaders } = store
+      const { contact, summary, sectionHeaders, sections, customSections } = store
+
+      // Build section_order for persistence
+      const sortedSections = [...sections].sort((a, b) => a.order - b.order)
+      const sectionOrder = sortedSections.map(s => ({ id: s.id, visible: s.visible }))
+
       await updateProfile({
         full_name: contact.fullName,
         location: contact.location,
@@ -46,6 +52,7 @@ export default function ResumeBuilderPage() {
         portfolio: contact.portfolio,
         summary,
         section_headers: sectionHeaders,
+        section_order: sectionOrder,
       })
       await Promise.all(store.experiences.map(exp =>
         experiencesApi.update(exp.id, {
@@ -82,6 +89,37 @@ export default function ResumeBuilderPage() {
           sort_order: 0,
         })
       ))
+
+      // Save custom sections
+      const customSectionEntries = sections.filter(s => s.type === 'custom')
+      for (const sec of customSectionEntries) {
+        const data = customSections[sec.id]
+        if (!data) continue
+        const items = data.items.map((item, i) => ({
+          text: item.text,
+          label: item.label || null,
+          sort_order: i,
+        }))
+        if (data.dbId) {
+          await customSectionsApi.update(data.dbId, {
+            header: sec.header,
+            layout: sec.layout,
+            sort_order: sec.order,
+            items,
+          } as any)
+        } else {
+          const created = await customSectionsApi.create({
+            section_id: sec.id,
+            header: sec.header,
+            layout: sec.layout || 'bullets',
+            sort_order: sec.order,
+            items,
+          } as any)
+          // Update dbId in store
+          data.dbId = (created as any).id
+        }
+      }
+
       store.markClean()
     } catch (err) {
       console.error('Failed to save resume data:', err)
@@ -103,6 +141,8 @@ export default function ResumeBuilderPage() {
         richContent={store.richContent}
         elementStyles={store.elementStyles}
         sectionHeaders={store.sectionHeaders}
+        sections={store.sections}
+        customSections={store.customSections}
       />
     ).toBlob()
     const url = URL.createObjectURL(blob)
@@ -133,6 +173,27 @@ export default function ResumeBuilderPage() {
     })
     const data = await res.json()
     window.open(`/api/resume/generated/${data.id}/download`, '_blank')
+  }, [store])
+
+  // Global Ctrl+Z / Ctrl+Y keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        // Only intercept if not focused on a text input (let browser handle native text undo)
+        const tag = (e.target as HTMLElement).tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
+        e.preventDefault()
+        store.undo()
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        const tag = (e.target as HTMLElement).tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
+        e.preventDefault()
+        store.redo()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
   }, [store])
 
   if (!store.loaded) {
@@ -237,6 +298,39 @@ export default function ResumeBuilderPage() {
             <option value="LETTER">Letter</option>
             <option value="A4">A4</option>
           </select>
+        </div>
+
+        <span className="w-px h-5 bg-border mx-1" />
+
+        {/* Undo / Redo / Reset */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={store.undo}
+            disabled={!store.canUndo()}
+            className="w-7 h-7 flex items-center justify-center bg-surface2 border border-border rounded text-text2 hover:text-text hover:border-text2 cursor-pointer text-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Undo (Ctrl+Z)"
+          >
+            &#8630;
+          </button>
+          <button
+            onClick={store.redo}
+            disabled={!store.canRedo()}
+            className="w-7 h-7 flex items-center justify-center bg-surface2 border border-border rounded text-text2 hover:text-text hover:border-text2 cursor-pointer text-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Redo (Ctrl+Y)"
+          >
+            &#8631;
+          </button>
+          <button
+            onClick={() => {
+              if (confirm('Reset all formatting to defaults? Text content will not be affected.')) {
+                store.resetAllFormatting()
+              }
+            }}
+            className="h-7 px-2 flex items-center justify-center bg-surface2 border border-border rounded text-text2 hover:text-text hover:border-text2 cursor-pointer text-[0.6rem] transition-colors"
+            title="Reset all formatting to defaults"
+          >
+            Reset Format
+          </button>
         </div>
 
         <span className="w-px h-5 bg-border mx-1" />
