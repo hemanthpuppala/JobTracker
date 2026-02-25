@@ -18,7 +18,10 @@ import type {
   ProjectItem,
   SkillItem,
   EducationItem,
+  ElementStyleOverride,
 } from '../../lib/resumeStore'
+import { resolveElementStylePdf } from '../../lib/resumeStore'
+import { richTextToPdfNodes, hasRichFormatting } from '../../lib/richTextToPdf'
 
 // Map config font names to @react-pdf/renderer built-in fonts.
 // To use actual Calibri, register .ttf files and update this map.
@@ -178,6 +181,8 @@ export interface ResumeDocumentProps {
   skills: SkillItem[]
   education: EducationItem[]
   styleConfig: ResumeStyleConfig
+  richContent?: Record<string, any>
+  elementStyles?: Record<string, ElementStyleOverride>
 }
 
 // --- Reusable components ---
@@ -186,11 +191,20 @@ function SectionHeader({ title, s }: { title: string; s: ReturnType<typeof build
   return <Text style={s.sectionHeader}>{title}</Text>
 }
 
-function Bullet({ text, s }: { text: string; s: ReturnType<typeof buildStyles> }) {
+function Bullet({ text, s, richJson, elStyleOverride }: {
+  text: string
+  s: ReturnType<typeof buildStyles>
+  richJson?: any
+  elStyleOverride?: ElementStyleOverride
+}) {
+  const useRich = richJson && hasRichFormatting(richJson)
+  const overrides = resolveElementStylePdf(elStyleOverride)
   return (
     <View style={s.bulletRow}>
       <Text style={s.bulletDot}>{'\u2022'}</Text>
-      <Text style={s.bulletText}>{text}</Text>
+      <Text style={[s.bulletText, overrides]}>
+        {useRich ? richTextToPdfNodes(richJson) : text}
+      </Text>
     </View>
   )
 }
@@ -218,6 +232,8 @@ export default function ResumeDocument({
   skills,
   education,
   styleConfig,
+  richContent = {},
+  elementStyles = {},
 }: ResumeDocumentProps) {
   const s = buildStyles(styleConfig)
   const pageSize = PAGE_SIZES[styleConfig.page]
@@ -248,7 +264,11 @@ export default function ResumeDocument({
         {summary && (
           <>
             <SectionHeader title="Professional Summary" s={s} />
-            <Text style={s.summary}>{summary}</Text>
+            <Text style={[s.summary, resolveElementStylePdf(elementStyles['summary'])]}>
+              {richContent['summary'] && hasRichFormatting(richContent['summary'])
+                ? richTextToPdfNodes(richContent['summary'])
+                : summary}
+            </Text>
           </>
         )}
 
@@ -259,7 +279,7 @@ export default function ResumeDocument({
             {incSkill.map(sk => (
               <Text key={sk.id} style={s.skillParagraph}>
                 <Text style={{ fontWeight: 'bold' }}>{sk.category}: </Text>
-                <Text>{sk.items}</Text>
+                <Text style={resolveElementStylePdf(elementStyles[`skill-${sk.id}-items`])}>{sk.items}</Text>
               </Text>
             ))}
           </>
@@ -282,7 +302,7 @@ export default function ResumeDocument({
                   }
                 />
                 {exp.bullets.filter(Boolean).map((b, i) => (
-                  <Bullet key={i} text={b} s={s} />
+                  <Bullet key={i} text={b} s={s} richJson={richContent[`exp-${exp.id}-bullet-${i}`]} elStyleOverride={elementStyles[`exp-${exp.id}-bullet-${i}`]} />
                 ))}
               </View>
             ))}
@@ -300,7 +320,7 @@ export default function ResumeDocument({
                   <Text style={{ fontStyle: 'italic' }}> | {proj.techStack}</Text>
                 </Text>
                 {proj.bullets.filter(Boolean).map((b, i) => (
-                  <Bullet key={i} text={b} s={s} />
+                  <Bullet key={i} text={b} s={s} richJson={richContent[`proj-${proj.id}-bullet-${i}`]} elStyleOverride={elementStyles[`proj-${proj.id}-bullet-${i}`]} />
                 ))}
               </View>
             ))}

@@ -75,6 +75,188 @@ const SCALABLE_KEYS = [
   'dates', 'projectTitle', 'projectTech', 'skillLabel', 'skillValue', 'education',
 ] as const
 
+/**
+ * Font-family mapping: must match the PDF renderer's FONT_MAP in ResumeDocument.tsx
+ * so that the interactive editor and PDF use visually equivalent fonts.
+ */
+const HTML_FONT_MAP: Record<string, string> = {
+  'Calibri': 'Helvetica, Arial, sans-serif',
+  'Helvetica': 'Helvetica, Arial, sans-serif',
+  'Times-Roman': '"Times New Roman", Times, serif',
+  'Courier': '"Courier New", Courier, monospace',
+}
+
+/**
+ * Build CSS-compatible style objects from the shared config.
+ * Mirrors buildStyles() in ResumeDocument.tsx exactly — same values, CSS units.
+ * Used by InteractiveEditor to render a pixel-accurate replica of the PDF.
+ */
+export function buildHtmlStyles(cfg: ResumeStyleConfig) {
+  const fontFamily = HTML_FONT_MAP[cfg.font] || 'sans-serif'
+  const body = cfg.bullet.size
+  const title = cfg.jobTitle.size
+  const pageSize = PAGE_SIZES[cfg.page]
+
+  return {
+    page: {
+      width: pageSize.width,
+      minHeight: pageSize.height,
+      fontFamily,
+      fontSize: `${cfg.baseFontSize}pt`,
+      color: cfg.colors.text,
+      paddingTop: cfg.margins.top,
+      paddingBottom: cfg.margins.bottom,
+      paddingLeft: cfg.margins.left,
+      paddingRight: cfg.margins.right,
+      lineHeight: cfg.lineHeight,
+    } as React.CSSProperties,
+
+    headerBlock: {
+      textAlign: 'center' as const,
+      marginBottom: 0,
+    } as React.CSSProperties,
+
+    name: {
+      fontSize: `${cfg.name.size}pt`,
+      fontWeight: cfg.name.bold ? 'bold' : 'normal',
+      textAlign: cfg.name.align,
+      lineHeight: 1.0,
+      marginBottom: 0,
+    } as React.CSSProperties,
+
+    contact: {
+      fontSize: `${cfg.contact.size}pt`,
+      textAlign: cfg.contact.align,
+      color: cfg.colors.muted,
+      lineHeight: 1.0,
+      marginTop: 2,
+      marginBottom: 0,
+    } as React.CSSProperties,
+
+    sectionHeader: {
+      fontSize: `${cfg.sectionHeader.size}pt`,
+      fontWeight: cfg.sectionHeader.bold ? 'bold' : 'normal',
+      textTransform: cfg.sectionHeader.uppercase ? 'uppercase' : 'none',
+      borderBottom: cfg.sectionHeader.borderBottom
+        ? `${cfg.sectionHeader.borderWidth}px solid ${cfg.sectionHeader.borderColor}`
+        : 'none',
+      marginTop: cfg.sectionHeader.spaceBefore,
+      paddingBottom: 2,
+      marginBottom: cfg.sectionHeader.spaceAfter,
+    } as React.CSSProperties,
+
+    summary: {
+      fontSize: `${body}pt`,
+      textAlign: cfg.bullet.align,
+      lineHeight: cfg.bullet.lineHeight,
+      marginTop: 1,
+    } as React.CSSProperties,
+
+    skillParagraph: {
+      fontSize: `${body}pt`,
+      marginBottom: 1,
+    } as React.CSSProperties,
+
+    skillLabel: {
+      fontSize: `${cfg.skillLabel.size}pt`,
+      fontWeight: cfg.skillLabel.bold ? 'bold' : 'normal',
+    } as React.CSSProperties,
+
+    skillValue: {
+      fontSize: `${cfg.skillValue.size}pt`,
+    } as React.CSSProperties,
+
+    titleDateRow: {
+      display: 'flex' as const,
+      flexDirection: 'row' as const,
+      justifyContent: 'space-between' as const,
+      alignItems: 'flex-start' as const,
+      marginTop: cfg.jobTitle.spaceBefore,
+    } as React.CSSProperties,
+
+    titleCol: {
+      flex: 1,
+      marginRight: 10,
+    } as React.CSSProperties,
+
+    titleText: {
+      fontSize: `${title}pt`,
+    } as React.CSSProperties,
+
+    titleBold: {
+      fontWeight: 'bold' as const,
+    } as React.CSSProperties,
+
+    dateCol: {
+      flexShrink: 0,
+      textAlign: 'right' as const,
+      fontSize: `${title}pt`,
+      fontStyle: 'italic' as const,
+    } as React.CSSProperties,
+
+    projectRow: {
+      fontSize: `${body}pt`,
+      marginTop: cfg.projectTitle.spaceBefore,
+    } as React.CSSProperties,
+
+    projectName: {
+      fontWeight: cfg.projectTitle.bold ? 'bold' : 'normal',
+      fontSize: `${cfg.projectTitle.size}pt`,
+    } as React.CSSProperties,
+
+    projectTech: {
+      fontSize: `${cfg.projectTech.size}pt`,
+      fontStyle: cfg.projectTech.italic ? 'italic' : 'normal',
+      color: cfg.colors.muted,
+    } as React.CSSProperties,
+
+    bulletRow: {
+      display: 'flex' as const,
+      flexDirection: 'row' as const,
+      paddingLeft: cfg.bullet.indent,
+      marginBottom: 0.5,
+    } as React.CSSProperties,
+
+    bulletDot: {
+      fontSize: `${body}pt`,
+      width: 10,
+      flexShrink: 0,
+    } as React.CSSProperties,
+
+    bulletText: {
+      fontSize: `${body}pt`,
+      flex: 1,
+      textAlign: cfg.bullet.align,
+      lineHeight: cfg.bullet.lineHeight,
+    } as React.CSSProperties,
+
+    eduRow: {
+      display: 'flex' as const,
+      flexDirection: 'row' as const,
+      justifyContent: 'space-between' as const,
+      alignItems: 'flex-start' as const,
+      marginTop: 1,
+    } as React.CSSProperties,
+
+    eduText: {
+      fontSize: `${body}pt`,
+      flex: 1,
+      marginRight: 4,
+    } as React.CSSProperties,
+
+    eduBold: {
+      fontWeight: cfg.education.bold ? 'bold' : 'normal',
+    } as React.CSSProperties,
+
+    eduDate: {
+      fontSize: `${body}pt`,
+      flexShrink: 0,
+      textAlign: 'right' as const,
+      fontStyle: 'italic' as const,
+    } as React.CSSProperties,
+  }
+}
+
 /** Derive a scaled style config — always scales from DEFAULT to avoid floating-point drift */
 export function scaleStyles(current: ResumeStyleConfig, newBaseFontSize: number): ResumeStyleConfig {
   const ratio = newBaseFontSize / DEFAULT_RESUME_STYLES.baseFontSize

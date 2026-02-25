@@ -57,6 +57,41 @@ export interface EducationItem {
   included: boolean
 }
 
+export type EditorMode = 'form' | 'interactive'
+
+export interface ElementStyleOverride {
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  fontSize?: number
+}
+
+/** Resolve element overrides into a flat CSS-compatible style object. */
+export function resolveElementStyle(
+  overrides: ElementStyleOverride | undefined,
+): React.CSSProperties {
+  if (!overrides) return {}
+  const s: React.CSSProperties = {}
+  if (overrides.fontSize) s.fontSize = `${overrides.fontSize}pt`
+  if (overrides.bold) s.fontWeight = 'bold'
+  if (overrides.italic) s.fontStyle = 'italic'
+  if (overrides.underline) s.textDecoration = 'underline'
+  return s
+}
+
+/** Resolve element overrides into react-pdf style props. */
+export function resolveElementStylePdf(
+  overrides: ElementStyleOverride | undefined,
+): Record<string, any> {
+  if (!overrides) return {}
+  const s: Record<string, any> = {}
+  if (overrides.fontSize) s.fontSize = overrides.fontSize
+  if (overrides.bold) s.fontWeight = 'bold'
+  if (overrides.italic) s.fontStyle = 'italic'
+  if (overrides.underline) s.textDecoration = 'underline'
+  return s
+}
+
 export interface ResumeBuilderState {
   // Content
   contact: ContactInfo
@@ -72,6 +107,12 @@ export interface ResumeBuilderState {
   // UI state
   loaded: boolean
   dirty: boolean
+  mode: EditorMode
+  selectedElementId: string | null
+  elementStyles: Record<string, ElementStyleOverride>
+
+  // Rich text content — TipTap JSON per element ID (e.g. 'exp-3-bullet-1')
+  richContent: Record<string, any>
 
   // Actions — content
   setContact: (c: Partial<ContactInfo>) => void
@@ -100,6 +141,12 @@ export interface ResumeBuilderState {
   setEducation: (edu: EducationItem[]) => void
   updateEducation: (id: number, data: Partial<EducationItem>) => void
   toggleEducation: (id: number) => void
+
+  // Actions — mode
+  setMode: (mode: EditorMode) => void
+  setSelectedElement: (id: string | null) => void
+  setElementStyle: (id: string, style: Partial<ElementStyleOverride>) => void
+  setRichContent: (elementId: string, json: any) => void
 
   // Actions — style
   setFont: (font: string) => void
@@ -158,6 +205,10 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
   styles: { ...DEFAULT_RESUME_STYLES },
   loaded: false,
   dirty: false,
+  mode: 'form' as EditorMode,
+  selectedElementId: null,
+  elementStyles: {},
+  richContent: {},
 
   // --- Contact ---
   setContact: (c) => set(s => ({ contact: { ...s.contact, ...c }, dirty: true })),
@@ -237,6 +288,17 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => ({
   })),
   toggleEducation: (id) => set(s => ({
     education: s.education.map(e => e.id === id ? { ...e, included: !e.included } : e), dirty: true,
+  })),
+
+  // --- Mode ---
+  setMode: (mode) => set({ mode }),
+  setSelectedElement: (selectedElementId) => set({ selectedElementId }),
+  setElementStyle: (id, style) => set(s => ({
+    elementStyles: { ...s.elementStyles, [id]: { ...s.elementStyles[id], ...style } },
+    dirty: true,
+  })),
+  setRichContent: (elementId, json) => set(s => ({
+    richContent: { ...s.richContent, [elementId]: json },
   })),
 
   // --- Styles ---

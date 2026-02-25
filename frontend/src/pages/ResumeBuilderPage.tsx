@@ -5,10 +5,12 @@ import { useResumeBuilderStore } from '../lib/resumeStore'
 import { FONT_OPTIONS, MARGIN_PRESETS } from '../lib/resumeStyles'
 import { getProfile, experiencesApi, projectsApi, skillsApi, educationApi, updateProfile } from '../api/resume'
 import ResumeForm from '../components/resume/ResumeForm'
+import InteractiveEditor from '../components/resume/InteractiveEditor'
 import ResumePreview from '../components/resume/ResumePreview'
 import ResizableSplit from '../components/resume/ResizableSplit'
 import ResumeDocument from '../components/resume/ResumeDocument'
 import Button from '../components/ui/Button'
+import { cn } from '../lib/utils'
 
 export default function ResumeBuilderPage() {
   const nav = useNavigate()
@@ -97,6 +99,8 @@ export default function ResumeBuilderPage() {
         skills={store.skills}
         education={store.education}
         styleConfig={store.styles}
+        richContent={store.richContent}
+        elementStyles={store.elementStyles}
       />
     ).toBlob()
     const url = URL.createObjectURL(blob)
@@ -154,6 +158,28 @@ export default function ResumeBuilderPage() {
         <span className="text-sm font-semibold">Resume Builder</span>
         {store.dirty && <span className="text-[0.6rem] text-orange bg-orange/10 px-1.5 py-0.5 rounded">Unsaved</span>}
 
+        {/* Mode toggle pill */}
+        <div className="flex items-center bg-surface2 rounded-full p-0.5 border border-border">
+          <button
+            className={cn(
+              'px-2.5 py-0.5 text-[0.6rem] font-medium rounded-full border-none cursor-pointer transition-all',
+              store.mode === 'form' ? 'bg-accent text-white shadow-sm' : 'bg-transparent text-text2 hover:text-text',
+            )}
+            onClick={() => store.setMode('form')}
+          >
+            Form
+          </button>
+          <button
+            className={cn(
+              'px-2.5 py-0.5 text-[0.6rem] font-medium rounded-full border-none cursor-pointer transition-all',
+              store.mode === 'interactive' ? 'bg-accent text-white shadow-sm' : 'bg-transparent text-text2 hover:text-text',
+            )}
+            onClick={() => store.setMode('interactive')}
+          >
+            Interactive
+          </button>
+        </div>
+
         <span className="flex-1" />
 
         {/* Format controls */}
@@ -168,6 +194,12 @@ export default function ResumeBuilderPage() {
           </select>
 
           <label className="text-text2 ml-1">Size:</label>
+          <button
+            onClick={() => store.setBaseFontSize(Math.max(8, store.styles.baseFontSize - 0.5))}
+            className="w-5 h-5 flex items-center justify-center bg-surface2 border border-border rounded text-text2 hover:text-text hover:border-text2 cursor-pointer text-xs transition-colors"
+          >
+            &minus;
+          </button>
           <input
             type="range"
             min={8}
@@ -175,8 +207,14 @@ export default function ResumeBuilderPage() {
             step={0.5}
             value={store.styles.baseFontSize}
             onChange={e => store.setBaseFontSize(Number(e.target.value))}
-            className="w-20 accent-accent cursor-pointer"
+            className="w-16 accent-accent cursor-pointer"
           />
+          <button
+            onClick={() => store.setBaseFontSize(Math.min(13, store.styles.baseFontSize + 0.5))}
+            className="w-5 h-5 flex items-center justify-center bg-surface2 border border-border rounded text-text2 hover:text-text hover:border-text2 cursor-pointer text-xs transition-colors"
+          >
+            +
+          </button>
           <span className="text-text2 w-8">{store.styles.baseFontSize}pt</span>
 
           <label className="text-text2 ml-1">Margins:</label>
@@ -213,12 +251,12 @@ export default function ResumeBuilderPage() {
         </Button>
       </div>
 
-      {/* Split pane */}
+      {/* Content — both modes use PDF preview as right pane (source of truth) */}
       <div className="flex-1 overflow-hidden">
         <ResizableSplit
-          left={<ResumeForm />}
+          left={store.mode === 'interactive' ? <InteractiveEditor /> : <ResumeForm />}
           right={<ResumePreview />}
-          defaultLeftPercent={40}
+          defaultLeftPercent={store.mode === 'interactive' ? 50 : 40}
         />
       </div>
     </div>
