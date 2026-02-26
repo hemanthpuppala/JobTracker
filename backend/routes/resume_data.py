@@ -6,12 +6,15 @@ from ..db import get_session
 from ..models.db_models import (
     Profile, Experience, ExperienceBullet,
     Project, ProjectBullet, Skill, SkillItem, Education,
+    CustomSection, CustomSectionItem,
 )
 from ..models.resume import (
     ProfileUpdate, ExperienceCreate, ExperienceUpdate,
     ProjectCreate, ProjectUpdate, SkillCreate, SkillUpdate,
     EducationCreate, EducationUpdate,
+    CustomSectionCreate, CustomSectionUpdate,
 )
+from ..services.resume_helpers import row_to_dict as _row_to_dict
 
 router = APIRouter(prefix="/api/resume")
 
@@ -34,17 +37,21 @@ def _skill_to_dict(skill: Skill) -> dict:
     return d
 
 
-def _row_to_dict(obj) -> dict:
-    return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
-
-
 # --- Profile ---
 @router.get("/profile")
 async def get_profile(session: Session = Depends(get_session)):
     profile = session.get(Profile, 1)
     if not profile:
         return {}
-    return _row_to_dict(profile)
+    d = _row_to_dict(profile)
+    # Parse JSON text columns
+    for json_field in ("section_headers", "section_order"):
+        if d.get(json_field) and isinstance(d[json_field], str):
+            try:
+                d[json_field] = json.loads(d[json_field])
+            except (json.JSONDecodeError, TypeError):
+                d[json_field] = None
+    return d
 
 
 @router.put("/profile")
@@ -53,9 +60,19 @@ async def update_profile(data: ProfileUpdate, session: Session = Depends(get_ses
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     for field, val in data.model_dump(exclude_unset=True).items():
+        # Serialize dict/list fields to JSON text for storage
+        if field in ("section_headers", "section_order") and isinstance(val, (dict, list)):
+            val = json.dumps(val)
         setattr(profile, field, val)
     session.commit()
-    return _row_to_dict(profile)
+    d = _row_to_dict(profile)
+    for json_field in ("section_headers", "section_order"):
+        if d.get(json_field) and isinstance(d[json_field], str):
+            try:
+                d[json_field] = json.loads(d[json_field])
+            except (json.JSONDecodeError, TypeError):
+                d[json_field] = None
+    return d
 
 
 # --- Experiences ---
@@ -244,5 +261,61 @@ async def delete_education(item_id: int, session: Session = Depends(get_session)
     if not edu:
         raise HTTPException(status_code=404, detail="Education not found")
     session.delete(edu)
+    session.commit()
+    return {"ok": True}
+
+
+# --- Custom Sections ---
+def _custom_section_to_dict(cs: CustomSection) -> dict:
+    d = {c.name: getattr(cs, c.name) for c in CustomSection.__table__.columns}
+    d["items"] = [
+        {"id": i.id, "section_id": i.section_id, "text": i.text, "label": i.label, "sort_order": i.sort_order}
+        for i in cs.items
+    ]
+    return d
+
+
+@router.get("/custom-sections")
+async def list_custom_sections(session: Session = Depends(get_session)):
+    rows = session.query(CustomSection).options(joinedload(CustomSection.items)).order_by(CustomSection.sort_order, CustomSection.id).all()
+    return [_custom_section_to_dict(cs) for cs in rows]
+
+
+@router.post("/custom-sections")
+async def create_custom_section(data: CustomSectionCreate, session: Session = Depends(get_session)):
+    cs = CustomSection(section_id=data.section_id, header=data.header, layout=data.layout, sort_order=data.sort_order)
+    session.add(cs)
+    session.flush()
+    for i, item in enumerate(data.items):
+        session.add(CustomSectionItem(section_id=cs.id, text=item.text, label=item.label, sort_order=item.sort_order or i))
+    session.commit()
+    session.refresh(cs)
+    return _custom_section_to_dict(cs)
+
+
+@router.put("/custom-sections/{item_id}")
+async def update_custom_section(item_id: int, data: CustomSectionUpdate, session: Session = Depends(get_session)):
+    cs = session.query(CustomSection).filter(CustomSection.id == item_id).first()
+    if not cs:
+        raise HTTPException(status_code=404, detail="Custom section not found")
+    update_data = data.model_dump(exclude_unset=True)
+    items_data = update_data.pop("items", None)
+    for k, v in update_data.items():
+        setattr(cs, k, v)
+    if items_data is not None:
+        session.query(CustomSectionItem).filter(CustomSectionItem.section_id == cs.id).delete()
+        for i, item in enumerate(items_data):
+            session.add(CustomSectionItem(section_id=cs.id, text=item["text"], label=item.get("label"), sort_order=item.get("sort_order", i)))
+    session.commit()
+    session.refresh(cs)
+    return _custom_section_to_dict(cs)
+
+
+@router.delete("/custom-sections/{item_id}")
+async def delete_custom_section(item_id: int, session: Session = Depends(get_session)):
+    cs = session.query(CustomSection).filter(CustomSection.id == item_id).first()
+    if not cs:
+        raise HTTPException(status_code=404, detail="Custom section not found")
+    session.delete(cs)
     session.commit()
     return {"ok": True}

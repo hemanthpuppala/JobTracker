@@ -30,6 +30,11 @@ export default function ResumePreview() {
     skills,
     education,
     styles: styleConfig,
+    richContent,
+    elementStyles,
+    sectionHeaders,
+    sections,
+    customSections,
   } = useResumeBuilderStore()
 
   // Collect props into a single object for debouncing
@@ -41,7 +46,12 @@ export default function ResumePreview() {
     skills,
     education,
     styleConfig,
-  }), [contact, summary, experiences, projects, skills, education, styleConfig])
+    richContent,
+    elementStyles,
+    sectionHeaders,
+    sections,
+    customSections,
+  }), [contact, summary, experiences, projects, skills, education, styleConfig, richContent, elementStyles, sectionHeaders, sections, customSections])
 
   const debouncedProps = useDebounce(rawProps, 300)
 

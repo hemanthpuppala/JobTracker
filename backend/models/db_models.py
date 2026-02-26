@@ -22,6 +22,35 @@ class Profile(Base):
     github = Column(Text)
     portfolio = Column(Text)
     summary = Column(Text)
+    section_headers = Column(Text)  # JSON: {"summary":"Professional Summary","skills":"Technical Skills",...}
+    section_order = Column(Text)  # JSON: [{"id":"summary","visible":true},...]
+
+
+class CustomSection(Base):
+    __tablename__ = "custom_sections"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    section_id = Column(Text, nullable=False, unique=True)  # 'custom-1'
+    header = Column(Text, nullable=False)
+    layout = Column(Text, nullable=False, default='bullets')  # bullets | keyvalue | text
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    items = relationship(
+        "CustomSectionItem", back_populates="section",
+        cascade="all, delete-orphan", order_by="CustomSectionItem.sort_order",
+    )
+
+
+class CustomSectionItem(Base):
+    __tablename__ = "custom_section_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    section_id = Column(Integer, ForeignKey("custom_sections.id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    label = Column(Text)  # for keyvalue layout
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    section = relationship("CustomSection", back_populates="items")
 
 
 class Job(Base):
@@ -144,6 +173,19 @@ class Education(Base):
     date_end = Column(Text, nullable=False)
     is_default = Column(Boolean, nullable=False, default=True)
     sort_order = Column(Integer, nullable=False, default=0)
+
+
+class ATSScore(Base):
+    __tablename__ = "ats_scores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True)
+    job_description = Column(Text, nullable=False)
+    resume_snapshot = Column(Text, nullable=False)
+    overall_score = Column(Integer, nullable=False)
+    category_scores = Column(Text, nullable=False)  # JSON
+    suggestions = Column(Text)  # JSON array
+    created_at = Column(Text, nullable=False)
 
 
 class GeneratedResume(Base):

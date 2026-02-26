@@ -18,10 +18,14 @@ import type {
   ProjectItem,
   SkillItem,
   EducationItem,
+  ElementStyleOverride,
+  ResumeSection,
+  CustomSectionData,
 } from '../../lib/resumeStore'
+import { resolveElementStylePdf } from '../../lib/resumeStore'
+import { richTextToPdfNodes, hasRichFormatting } from '../../lib/richTextToPdf'
 
 // Map config font names to @react-pdf/renderer built-in fonts.
-// To use actual Calibri, register .ttf files and update this map.
 const FONT_MAP: Record<string, string> = {
   'Calibri': 'Helvetica',
   'Helvetica': 'Helvetica',
@@ -35,8 +39,6 @@ function resolveFont(font: string): string {
 
 function buildStyles(cfg: ResumeStyleConfig) {
   const fontFamily = resolveFont(cfg.font)
-  const body = cfg.bullet.size
-  const title = cfg.jobTitle.size
 
   return StyleSheet.create({
     page: {
@@ -50,122 +52,42 @@ function buildStyles(cfg: ResumeStyleConfig) {
       lineHeight: cfg.lineHeight,
     },
 
-    // --- Header: name + contact tightly coupled ---
-    headerBlock: {
-      alignItems: 'center',
-      marginBottom: 0,
-    },
-    name: {
-      fontSize: cfg.name.size,
-      fontWeight: 'bold',
-      textAlign: 'center',
-      lineHeight: 1.0,
-      marginBottom: 0,
-    },
-    contact: {
-      fontSize: cfg.contact.size,
-      textAlign: 'center',
-      color: cfg.colors.muted,
-      lineHeight: 1.0,
-      marginTop: 2,
-      marginBottom: 0,
-    },
+    // --- Header ---
+    headerBlock: { alignItems: 'center', marginBottom: 0 },
+    name: { fontSize: cfg.name.size, fontWeight: 'bold', textAlign: 'center', lineHeight: 1.0, marginBottom: 0 },
+    contact: { fontSize: cfg.contact.size, textAlign: 'center', color: cfg.colors.muted, lineHeight: 1.0, marginTop: 2, marginBottom: 0 },
 
-    // --- Section header with bottom rule ---
+    // --- Section header ---
     sectionHeader: {
-      fontSize: cfg.sectionHeader.size,
-      fontWeight: 'bold',
-      textTransform: 'uppercase',
+      fontSize: cfg.sectionHeader.size, fontWeight: 'bold', textTransform: 'uppercase',
       borderBottomWidth: cfg.sectionHeader.borderBottom ? cfg.sectionHeader.borderWidth : 0,
-      borderBottomColor: cfg.sectionHeader.borderColor,
-      borderBottomStyle: 'solid',
-      marginTop: cfg.sectionHeader.spaceBefore,
-      paddingBottom: 2,
-      marginBottom: cfg.sectionHeader.spaceAfter,
+      borderBottomColor: cfg.sectionHeader.borderColor, borderBottomStyle: 'solid',
+      marginTop: cfg.sectionHeader.spaceBefore, paddingBottom: 2, marginBottom: cfg.sectionHeader.spaceAfter,
     },
 
-    // --- Summary ---
-    summary: {
-      fontSize: body,
-      textAlign: 'justify',
-      lineHeight: cfg.bullet.lineHeight,
-      marginTop: 1,
-    },
+    // --- Summary (own style key) ---
+    summary: { fontSize: cfg.summaryText.size, textAlign: cfg.summaryText.align, lineHeight: cfg.summaryText.lineHeight, marginTop: 1 },
 
-    // --- Skills: single Text per row, bold label inline ---
-    skillParagraph: {
-      fontSize: body,
-      marginBottom: 1,
-    },
+    // --- Skills ---
+    skillParagraph: { fontSize: cfg.skillValue.size, marginBottom: 1 },
 
-    // --- Title + Date row (experience, education) ---
-    titleDateRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginTop: cfg.jobTitle.spaceBefore,
-    },
-    titleDateRowNoTop: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginTop: 1,
-    },
-    titleCol: {
-      flex: 1,
-      marginRight: 10,
-    },
-    dateCol: {
-      flexShrink: 0,
-      textAlign: 'right',
-      fontSize: title,
-      fontStyle: 'italic',
-    },
+    // --- Experience ---
+    expTitleDateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: cfg.jobTitle.spaceBefore },
+    expTitleCol: { flex: 1, marginRight: 10 },
+    expDateCol: { flexShrink: 0, textAlign: 'right', fontSize: cfg.dates.size, fontStyle: 'italic' },
+    expBulletRow: { flexDirection: 'row', paddingLeft: cfg.expBullet.indent, marginBottom: 0.5 },
+    expBulletDot: { fontSize: cfg.expBullet.size, width: 10, flexShrink: 0 },
+    expBulletText: { fontSize: cfg.expBullet.size, flex: 1, textAlign: cfg.expBullet.align, lineHeight: cfg.expBullet.lineHeight },
 
-    // --- Tech stack line (italic, below title) ---
-    techLine: {
-      fontSize: body,
-      fontStyle: 'italic',
-      color: cfg.colors.muted,
-      marginBottom: 1,
-    },
+    // --- Projects ---
+    projBulletRow: { flexDirection: 'row', paddingLeft: cfg.projBullet.indent, marginBottom: 0.5 },
+    projBulletDot: { fontSize: cfg.projBullet.size, width: 10, flexShrink: 0 },
+    projBulletText: { fontSize: cfg.projBullet.size, flex: 1, textAlign: cfg.projBullet.align, lineHeight: cfg.projBullet.lineHeight },
 
-    // --- Bullets ---
-    bulletRow: {
-      flexDirection: 'row',
-      paddingLeft: cfg.bullet.indent,
-      marginBottom: 0.5,
-    },
-    bulletDot: {
-      fontSize: body,
-      width: 10,
-      flexShrink: 0,
-    },
-    bulletText: {
-      fontSize: body,
-      flex: 1,
-      textAlign: 'justify',
-      lineHeight: cfg.bullet.lineHeight,
-    },
-
-    // --- Education: single row, text left + date right ---
-    eduRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginTop: 1,
-    },
-    eduText: {
-      fontSize: body,
-      flex: 1,
-      marginRight: 4,
-    },
-    eduDate: {
-      fontSize: body,
-      flexShrink: 0,
-      textAlign: 'right',
-      fontStyle: 'italic',
-    },
+    // --- Education ---
+    eduRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 1 },
+    eduText: { fontSize: cfg.education.size, flex: 1, marginRight: 4 },
+    eduDate: { fontSize: cfg.eduDate.size, flexShrink: 0, textAlign: 'right', fontStyle: cfg.eduDate.italic ? 'italic' : 'normal' },
   })
 }
 
@@ -178,6 +100,11 @@ export interface ResumeDocumentProps {
   skills: SkillItem[]
   education: EducationItem[]
   styleConfig: ResumeStyleConfig
+  richContent?: Record<string, any>
+  elementStyles?: Record<string, ElementStyleOverride>
+  sectionHeaders?: Record<string, string>
+  sections?: ResumeSection[]
+  customSections?: Record<string, CustomSectionData>
 }
 
 // --- Reusable components ---
@@ -186,28 +113,34 @@ function SectionHeader({ title, s }: { title: string; s: ReturnType<typeof build
   return <Text style={s.sectionHeader}>{title}</Text>
 }
 
-function Bullet({ text, s }: { text: string; s: ReturnType<typeof buildStyles> }) {
+function Bullet({ text, richJson, elStyleOverride, rowStyle, dotStyle, textStyle }: {
+  text: string
+  richJson?: any
+  elStyleOverride?: ElementStyleOverride
+  rowStyle: any
+  dotStyle: any
+  textStyle: any
+}) {
+  const useRich = richJson && hasRichFormatting(richJson)
+  const overrides = resolveElementStylePdf(elStyleOverride)
   return (
-    <View style={s.bulletRow}>
-      <Text style={s.bulletDot}>{'\u2022'}</Text>
-      <Text style={s.bulletText}>{text}</Text>
+    <View style={rowStyle}>
+      <Text style={dotStyle}>{'\u2022'}</Text>
+      <Text style={[textStyle, overrides]}>
+        {useRich ? richTextToPdfNodes(richJson) : text}
+      </Text>
     </View>
   )
 }
 
-function TitleDateLine({ title, date, s, noTopMargin }: {
-  title: React.ReactNode
-  date: string
-  s: ReturnType<typeof buildStyles>
-  noTopMargin?: boolean
-}) {
-  return (
-    <View style={noTopMargin ? s.titleDateRowNoTop : s.titleDateRow}>
-      <View style={s.titleCol}>{typeof title === 'string' ? <Text>{title}</Text> : title}</View>
-      <Text style={s.dateCol}>{date}</Text>
-    </View>
-  )
-}
+// Default sections for backwards compat
+const DEFAULT_SECTION_ORDER: ResumeSection[] = [
+  { id: 'summary',    type: 'summary',    order: 0, visible: true, header: 'Professional Summary' },
+  { id: 'skills',     type: 'skills',     order: 1, visible: true, header: 'Technical Skills' },
+  { id: 'experience', type: 'experience', order: 2, visible: true, header: 'Professional Experience' },
+  { id: 'projects',   type: 'projects',   order: 3, visible: true, header: 'Key Projects' },
+  { id: 'education',  type: 'education',  order: 4, visible: true, header: 'Education' },
+]
 
 // --- Main Document ---
 export default function ResumeDocument({
@@ -218,11 +151,15 @@ export default function ResumeDocument({
   skills,
   education,
   styleConfig,
+  richContent = {},
+  elementStyles = {},
+  sectionHeaders = {},
+  sections: sectionsProp,
+  customSections = {},
 }: ResumeDocumentProps) {
   const s = buildStyles(styleConfig)
   const pageSize = PAGE_SIZES[styleConfig.page]
   const titleSize = styleConfig.jobTitle.size
-  const bodySize = styleConfig.bullet.size
 
   const contactParts = [
     contact.location, contact.phone, contact.email,
@@ -235,93 +172,150 @@ export default function ResumeDocument({
   const incSkill = skills.filter(sk => sk.included)
   const incEdu = education.filter(e => e.included)
 
-  return (
-    <Document>
-      <Page size={{ width: pageSize.width, height: pageSize.height }} style={s.page}>
-        {/* ── Name + Contact ── */}
-        <View style={s.headerBlock}>
-          <Text style={s.name}>{contact.fullName}</Text>
-          {contactLine && <Text style={s.contact}>{contactLine}</Text>}
-        </View>
+  const activeSections = (sectionsProp || DEFAULT_SECTION_ORDER)
+    .filter(sec => sec.visible)
+    .sort((a, b) => a.order - b.order)
 
-        {/* ── Professional Summary ── */}
-        {summary && (
-          <>
-            <SectionHeader title="Professional Summary" s={s} />
-            <Text style={s.summary}>{summary}</Text>
-          </>
-        )}
+  // react-pdf's reconciler doesn't handle child reordering properly —
+  // it appends new nodes instead of moving existing ones.
+  // A unique key forces a full rebuild when section order/visibility changes.
+  const sectionLayoutKey = activeSections.map(s => s.id).join('|')
 
-        {/* ── Technical Skills ── */}
-        {incSkill.length > 0 && (
-          <>
-            <SectionHeader title="Technical Skills" s={s} />
+  function renderSection(section: ResumeSection) {
+    const headerText = sectionHeaders[section.id] || section.header
+
+    switch (section.type) {
+      case 'summary':
+        if (!summary) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
+            <Text style={[s.summary, resolveElementStylePdf(elementStyles['summary'])]}>
+              {richContent['summary'] && hasRichFormatting(richContent['summary'])
+                ? richTextToPdfNodes(richContent['summary'])
+                : summary}
+            </Text>
+          </View>
+        )
+
+      case 'skills':
+        if (incSkill.length === 0) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             {incSkill.map(sk => (
               <Text key={sk.id} style={s.skillParagraph}>
-                <Text style={{ fontWeight: 'bold' }}>{sk.category}: </Text>
-                <Text>{sk.items}</Text>
+                <Text style={{ fontWeight: styleConfig.skillLabel.bold ? 'bold' : 'normal', fontSize: styleConfig.skillLabel.size, ...resolveElementStylePdf(elementStyles[`skill-${sk.id}-category`]) }}>{sk.category}: </Text>
+                <Text style={resolveElementStylePdf(elementStyles[`skill-${sk.id}-items`])}>{sk.items}</Text>
               </Text>
             ))}
-          </>
-        )}
+          </View>
+        )
 
-        {/* ── Professional Experience ── */}
-        {incExp.length > 0 && (
-          <>
-            <SectionHeader title="Professional Experience" s={s} />
+      case 'experience':
+        if (incExp.length === 0) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             {incExp.map(exp => (
               <View key={exp.id} wrap={false}>
-                <TitleDateLine
-                  s={s}
-                  date={`${exp.dateStart} - ${exp.dateEnd || 'Present'}`}
-                  title={
+                <View style={s.expTitleDateRow}>
+                  <View style={s.expTitleCol}>
                     <Text style={{ fontSize: titleSize }}>
-                      <Text style={{ fontWeight: 'bold' }}>{exp.company}</Text>
-                      <Text> | {exp.title}</Text>
+                      <Text style={{ fontWeight: styleConfig.jobTitle.bold ? 'bold' : 'normal', ...resolveElementStylePdf(elementStyles[`exp-${exp.id}-company`]) }}>{exp.company}</Text>
+                      <Text style={resolveElementStylePdf(elementStyles[`exp-${exp.id}-title`])}> | {exp.title}</Text>
                     </Text>
-                  }
-                />
+                  </View>
+                  <Text style={[s.expDateCol, resolveElementStylePdf(elementStyles[`exp-${exp.id}-date`])]}>{exp.dateStart} - {exp.dateEnd || 'Present'}</Text>
+                </View>
                 {exp.bullets.filter(Boolean).map((b, i) => (
-                  <Bullet key={i} text={b} s={s} />
+                  <Bullet key={i} text={b} rowStyle={s.expBulletRow} dotStyle={s.expBulletDot} textStyle={s.expBulletText} richJson={richContent[`exp-${exp.id}-bullet-${i}`]} elStyleOverride={elementStyles[`exp-${exp.id}-bullet-${i}`]} />
                 ))}
               </View>
             ))}
-          </>
-        )}
+          </View>
+        )
 
-        {/* ── Key Projects ── */}
-        {incProj.length > 0 && (
-          <>
-            <SectionHeader title="Key Projects" s={s} />
+      case 'projects':
+        if (incProj.length === 0) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             {incProj.map(proj => (
               <View key={proj.id} wrap={false}>
-                <Text style={{ fontSize: bodySize, marginTop: styleConfig.projectTitle.spaceBefore }}>
-                  <Text style={{ fontWeight: 'bold', fontSize: titleSize }}>{proj.name}</Text>
-                  <Text style={{ fontStyle: 'italic' }}> | {proj.techStack}</Text>
+                <Text style={{ marginTop: styleConfig.projectTitle.spaceBefore }}>
+                  <Text style={{ fontWeight: styleConfig.projectTitle.bold ? 'bold' : 'normal', fontSize: styleConfig.projectTitle.size, ...resolveElementStylePdf(elementStyles[`proj-${proj.id}-name`]) }}>{proj.name}</Text>
+                  <Text style={{ fontStyle: styleConfig.projectTech.italic ? 'italic' : 'normal', fontSize: styleConfig.projectTech.size, color: styleConfig.colors.muted, ...resolveElementStylePdf(elementStyles[`proj-${proj.id}-tech`]) }}> | {proj.techStack}</Text>
                 </Text>
                 {proj.bullets.filter(Boolean).map((b, i) => (
-                  <Bullet key={i} text={b} s={s} />
+                  <Bullet key={i} text={b} rowStyle={s.projBulletRow} dotStyle={s.projBulletDot} textStyle={s.projBulletText} richJson={richContent[`proj-${proj.id}-bullet-${i}`]} elStyleOverride={elementStyles[`proj-${proj.id}-bullet-${i}`]} />
                 ))}
               </View>
             ))}
-          </>
-        )}
+          </View>
+        )
 
-        {/* ── Education ── */}
-        {incEdu.length > 0 && (
-          <>
-            <SectionHeader title="Education" s={s} />
+      case 'education':
+        if (incEdu.length === 0) return null
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
             {incEdu.map(edu => (
               <View key={edu.id} style={s.eduRow}>
                 <Text style={s.eduText}>
-                  <Text style={{ fontWeight: 'bold' }}>{edu.institution}</Text>
-                  <Text> | {edu.degree}{edu.gpa ? ` (GPA: ${edu.gpa})` : ''}</Text>
+                  <Text style={{ fontWeight: styleConfig.education.bold ? 'bold' : 'normal', ...resolveElementStylePdf(elementStyles[`edu-${edu.id}-institution`]) }}>{edu.institution}</Text>
+                  <Text style={resolveElementStylePdf(elementStyles[`edu-${edu.id}-degree`])}> | {edu.degree}{edu.gpa ? ` (GPA: ${edu.gpa})` : ''}</Text>
                 </Text>
-                <Text style={s.eduDate}>{edu.dateStart} - {edu.dateEnd}</Text>
+                <Text style={[s.eduDate, resolveElementStylePdf(elementStyles[`edu-${edu.id}-date`])]}>{edu.dateStart} - {edu.dateEnd}</Text>
               </View>
             ))}
-          </>
-        )}
+          </View>
+        )
+
+      case 'custom': {
+        const customData = customSections[section.id]
+        if (!customData) return null
+        const items = customData.items.filter(i => i.included)
+        if (items.length === 0) return null
+
+        return (
+          <View key={section.id}>
+            <SectionHeader title={headerText} s={s} />
+            {section.layout === 'text' && items[0] && (
+              <Text style={s.summary}>{items[0].text}</Text>
+            )}
+            {section.layout === 'keyvalue' && items.map((item, i) => (
+              <Text key={item.id} style={s.skillParagraph}>
+                <Text style={{ fontWeight: 'bold', fontSize: styleConfig.skillLabel.size }}>{item.label || ''}: </Text>
+                <Text>{item.text}</Text>
+              </Text>
+            ))}
+            {section.layout === 'bullets' && items.map((item, i) => (
+              <View key={item.id} style={s.expBulletRow}>
+                <Text style={s.expBulletDot}>{'\u2022'}</Text>
+                <Text style={s.expBulletText}>{item.text}</Text>
+              </View>
+            ))}
+          </View>
+        )
+      }
+
+      default:
+        return null
+    }
+  }
+
+  return (
+    <Document>
+      <Page key={sectionLayoutKey} size={{ width: pageSize.width, height: pageSize.height }} style={s.page}>
+        {/* ── Name + Contact ── */}
+        <View style={s.headerBlock}>
+          <Text style={[s.name, resolveElementStylePdf(elementStyles['contact-name'])]}>{contact.fullName}</Text>
+          {contactLine && <Text style={s.contact}>{contactLine}</Text>}
+        </View>
+
+        {/* ── Dynamic sections ── */}
+        {activeSections.map(section => renderSection(section))}
       </Page>
     </Document>
   )

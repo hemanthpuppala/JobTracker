@@ -12,6 +12,7 @@ class Profile(BaseModel):
     github: Optional[str] = None
     portfolio: Optional[str] = None
     summary: Optional[str] = None
+    section_headers: Optional[dict] = None
 
 
 class ProfileUpdate(BaseModel):
@@ -23,6 +24,8 @@ class ProfileUpdate(BaseModel):
     github: Optional[str] = None
     portfolio: Optional[str] = None
     summary: Optional[str] = None
+    section_headers: Optional[dict] = None
+    section_order: Optional[list] = None
 
 
 class ExperienceCreate(BaseModel):
@@ -87,6 +90,27 @@ class EducationUpdate(BaseModel):
     date_end: Optional[str] = None
     is_default: Optional[bool] = None
     sort_order: Optional[int] = None
+
+
+class CustomSectionItemCreate(BaseModel):
+    text: str
+    label: Optional[str] = None
+    sort_order: int = 0
+
+
+class CustomSectionCreate(BaseModel):
+    section_id: str
+    header: str
+    layout: str = 'bullets'
+    sort_order: int = 0
+    items: list[CustomSectionItemCreate] = []
+
+
+class CustomSectionUpdate(BaseModel):
+    header: Optional[str] = None
+    layout: Optional[str] = None
+    sort_order: Optional[int] = None
+    items: Optional[list[CustomSectionItemCreate]] = None
 
 
 class DocxStyleConfig(BaseModel):

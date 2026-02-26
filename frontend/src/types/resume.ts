@@ -8,6 +8,8 @@ export interface Profile {
   github: string | null
   portfolio: string | null
   summary: string | null
+  section_headers: Record<string, string> | null
+  section_order: Array<{ id: string; visible: boolean }> | null
 }
 
 export interface Experience {
@@ -56,6 +58,23 @@ export interface GeneratedResume {
   selected_project_ids: string | null
   tailoring_notes: string | null
   created_at: string
+}
+
+export interface CustomSectionItem {
+  id: number
+  section_id: number
+  text: string
+  label: string | null
+  sort_order: number
+}
+
+export interface CustomSection {
+  id: number
+  section_id: string
+  header: string
+  layout: string
+  sort_order: number
+  items: CustomSectionItem[]
 }
 
 export interface DocxStyleConfig {

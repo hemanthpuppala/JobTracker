@@ -5,6 +5,7 @@ import JobsPage from './pages/JobsPage'
 import JobDetailPage from './pages/JobDetailPage'
 import ResumePage from './pages/ResumePage'
 import ResumeBuilderPage from './pages/ResumeBuilderPage'
+import ATSScorePage from './pages/ATSScorePage'
 import { useWebSocket } from './hooks/useWebSocket'
 import { useJobsStore } from './hooks/useJobs'
 import { exportCSV } from './api/jobs'
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/" element={<JobsPage addModalOpen={addModalOpen} setAddModalOpen={setAddModalOpen} />} />
         <Route path="/job/:id" element={<JobDetailPage />} />
         <Route path="/resume" element={<ResumePage />} />
+        <Route path="/ats-score" element={<ATSScorePage />} />
       </Routes>
     </div>
   )
