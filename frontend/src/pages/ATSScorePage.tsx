@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { scoreResume, listATSScores, deleteATSScore, uploadResume, type ATSScoreResult, type ATSCategoryScore } from '../api/ats'
+import { scoreResume, listATSScores, getATSScore, deleteATSScore, uploadResume, type ATSScoreResult, type ATSCategoryScore } from '../api/ats'
 import { fetchJobs } from '../api/jobs'
 import type { Job } from '../types/job'
 import Button from '../components/ui/Button'
@@ -126,8 +126,14 @@ export default function ATSScorePage() {
     if (result?.id === id) setResult(null)
   }
 
-  const handleHistoryClick = (item: ATSScoreResult) => {
-    setResult(item)
+  const handleHistoryClick = async (item: ATSScoreResult) => {
+    try {
+      const full = await getATSScore(item.id)
+      setResult(full)
+      if (full.job_description) setJd(full.job_description)
+    } catch {
+      setResult(item)
+    }
   }
 
   return (
