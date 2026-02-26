@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 
 from .db import init_tables, SessionLocal
 from .seed import seed_resume_data
-from .config import CORS_ORIGINS, STATIC_DIR
+from .config import CORS_ORIGINS, STATIC_DIR, PORT
 from .routes import auth, jobs, resume_data, resume_generate, ats
 from .services.websocket import connected_clients
 
@@ -67,5 +67,5 @@ if STATIC_DIR.exists():
 
 if __name__ == "__main__":
     import uvicorn
-    print("ResumeForge running on http://localhost:13952")
-    uvicorn.run(app, host="0.0.0.0", port=13952, access_log=False, log_level="warning")
+    print(f"ResumeForge running on http://localhost:{PORT}")
+    uvicorn.run(app, host="0.0.0.0", port=PORT, access_log=False, log_level="warning")

@@ -14,4 +14,6 @@ CORS_ORIGINS = [
     ).split(",")
 ]
 
+PORT = int(os.getenv("PORT", "13952"))
+
 VALENTINE_PASSWORD = {"month": "7", "day": "11", "year": "2002"}

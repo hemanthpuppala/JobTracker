@@ -9,6 +9,7 @@ jobs.db
 
 # Generated
 generated_resumes/
+backend/static/
 
 # Node
 frontend/node_modules/
