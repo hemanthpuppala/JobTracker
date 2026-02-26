@@ -14,6 +14,7 @@ from ..models.resume import (
     EducationCreate, EducationUpdate,
     CustomSectionCreate, CustomSectionUpdate,
 )
+from ..services.resume_helpers import row_to_dict as _row_to_dict
 
 router = APIRouter(prefix="/api/resume")
 
@@ -34,10 +35,6 @@ def _skill_to_dict(skill: Skill) -> dict:
     d = {c.name: getattr(skill, c.name) for c in Skill.__table__.columns}
     d["items"] = [{"id": i.id, "skill_id": i.skill_id, "item": i.item, "sort_order": i.sort_order} for i in skill.items]
     return d
-
-
-def _row_to_dict(obj) -> dict:
-    return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
 
 
 # --- Profile ---

@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 from .db import init_tables, SessionLocal
 from .seed import seed_resume_data
 from .config import UI_PASSWORD
-from .routes import auth, jobs, resume_data, resume_generate
+from .routes import auth, jobs, resume_data, resume_generate, ats
 from .services.websocket import connected_clients
 
 
@@ -36,6 +36,7 @@ app.include_router(auth.router)
 app.include_router(jobs.router)
 app.include_router(resume_data.router)
 app.include_router(resume_generate.router)
+app.include_router(ats.router)
 
 
 @app.get("/")

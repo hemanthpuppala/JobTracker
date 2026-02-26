@@ -345,6 +345,11 @@ export default function ResumeBuilderPage() {
         <Button size="sm" onClick={handleDownloadDOCX}>
           &#11015; DOCX
         </Button>
+        <a href="/ats-score" target="_blank" rel="noopener">
+          <Button variant="outline" size="sm" type="button">
+            Check ATS
+          </Button>
+        </a>
       </div>
 
       {/* Content — both modes use PDF preview as right pane (source of truth) */}

@@ -175,6 +175,19 @@ class Education(Base):
     sort_order = Column(Integer, nullable=False, default=0)
 
 
+class ATSScore(Base):
+    __tablename__ = "ats_scores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True)
+    job_description = Column(Text, nullable=False)
+    resume_snapshot = Column(Text, nullable=False)
+    overall_score = Column(Integer, nullable=False)
+    category_scores = Column(Text, nullable=False)  # JSON
+    suggestions = Column(Text)  # JSON array
+    created_at = Column(Text, nullable=False)
+
+
 class GeneratedResume(Base):
     __tablename__ = "generated_resumes"
 

@@ -48,6 +48,16 @@ export default function Header({ wsConnected, onAddJob, onExport, onRefresh, onS
           >
             Resume Builder
           </a>
+          <Link
+            to="/ats-score"
+            className={`px-3 py-1.5 rounded-lg text-sm transition-all duration-150 ${
+              location.pathname === '/ats-score'
+                ? 'bg-accent/15 text-accent font-medium'
+                : 'text-text2 hover:text-text hover:bg-surface2'
+            }`}
+          >
+            ATS Score
+          </Link>
         </nav>
       </div>
       <div className="flex items-center gap-2">
