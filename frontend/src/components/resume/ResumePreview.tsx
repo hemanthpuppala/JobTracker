@@ -6,7 +6,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { PDFViewer } from '@react-pdf/renderer'
 import ResumeDocument from './ResumeDocument'
 import type { ResumeDocumentProps } from './ResumeDocument'
-import { useResumeBuilderStore } from '../../lib/resumeStore'
+import { useResumeBuilderStore, getDocumentProps } from '../../lib/resumeStore'
 
 /** Hook to debounce a value by `delay` ms */
 function useDebounce<T>(value: T, delay: number): T {
@@ -22,36 +22,13 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export default function ResumePreview() {
-  const {
-    contact,
-    summary,
-    experiences,
-    projects,
-    skills,
-    education,
-    styles: styleConfig,
-    richContent,
-    elementStyles,
-    sectionHeaders,
-    sections,
-    customSections,
-  } = useResumeBuilderStore()
+  const store = useResumeBuilderStore()
 
-  // Collect props into a single object for debouncing
-  const rawProps: ResumeDocumentProps = useMemo(() => ({
-    contact,
-    summary,
-    experiences,
-    projects,
-    skills,
-    education,
-    styleConfig,
-    richContent,
-    elementStyles,
-    sectionHeaders,
-    sections,
-    customSections,
-  }), [contact, summary, experiences, projects, skills, education, styleConfig, richContent, elementStyles, sectionHeaders, sections, customSections])
+  const rawProps: ResumeDocumentProps = useMemo(() => getDocumentProps(store), [
+    store.contact, store.summary, store.experiences, store.projects, store.skills,
+    store.education, store.styles, store.richContent, store.elementStyles,
+    store.sectionHeaders, store.sections, store.customSections,
+  ])
 
   const debouncedProps = useDebounce(rawProps, 300)
 

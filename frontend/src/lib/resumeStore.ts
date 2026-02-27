@@ -92,6 +92,145 @@ export const DEFAULT_SECTIONS: ResumeSection[] = [
 
 export type EditorMode = 'form' | 'interactive'
 
+/** Extract ResumeDocument props from the store (DRY helper used by preview, download, and page count). */
+export function getDocumentProps(store: {
+  contact: ContactInfo
+  summary: string
+  experiences: ExperienceItem[]
+  projects: ProjectItem[]
+  skills: SkillItem[]
+  education: EducationItem[]
+  styles: ResumeStyleConfig
+  richContent: Record<string, any>
+  elementStyles: Record<string, any>
+  sectionHeaders: Record<string, string>
+  sections: ResumeSection[]
+  customSections: Record<string, any>
+}) {
+  return {
+    contact: store.contact,
+    summary: store.summary,
+    experiences: store.experiences,
+    projects: store.projects,
+    skills: store.skills,
+    education: store.education,
+    styleConfig: store.styles,
+    richContent: store.richContent,
+    elementStyles: store.elementStyles,
+    sectionHeaders: store.sectionHeaders,
+    sections: store.sections,
+    customSections: store.customSections,
+  }
+}
+
+/**
+ * Build plain-text representation of the resume from store state.
+ * Mirrors what the PDF preview renders — respects section order, visibility, and included flags.
+ */
+export function buildResumeText(state: {
+  contact: ContactInfo
+  summary: string
+  experiences: ExperienceItem[]
+  projects: ProjectItem[]
+  skills: SkillItem[]
+  education: EducationItem[]
+  sections: ResumeSection[]
+  sectionHeaders: Record<string, string>
+  customSections: Record<string, CustomSectionData>
+}): string {
+  const lines: string[] = []
+
+  // Contact header
+  lines.push(state.contact.fullName)
+  const parts = [state.contact.email, state.contact.phone, state.contact.location,
+    state.contact.linkedin, state.contact.github, state.contact.portfolio].filter(Boolean)
+  if (parts.length) lines.push(parts.join(' | '))
+  lines.push('')
+
+  // Sections in order
+  const sorted = [...state.sections].sort((a, b) => a.order - b.order)
+  for (const sec of sorted) {
+    if (!sec.visible) continue
+    switch (sec.type) {
+      case 'summary':
+        if (state.summary) {
+          lines.push(sec.header.toUpperCase())
+          lines.push(state.summary)
+          lines.push('')
+        }
+        break
+      case 'experience': {
+        const included = state.experiences.filter(e => e.included)
+        if (included.length) {
+          lines.push(sec.header.toUpperCase())
+          for (const exp of included) {
+            const dateRange = `${exp.dateStart} - ${exp.dateEnd || 'Present'}`
+            lines.push(`${exp.title}, ${exp.company} (${dateRange})`)
+            for (const b of exp.bullets) lines.push(`  - ${b}`)
+            lines.push('')
+          }
+        }
+        break
+      }
+      case 'projects': {
+        const included = state.projects.filter(p => p.included)
+        if (included.length) {
+          lines.push(sec.header.toUpperCase())
+          for (const proj of included) {
+            lines.push(`${proj.name} | ${proj.techStack}`)
+            for (const b of proj.bullets) lines.push(`  - ${b}`)
+            lines.push('')
+          }
+        }
+        break
+      }
+      case 'skills': {
+        const included = state.skills.filter(s => s.included)
+        if (included.length) {
+          lines.push(sec.header.toUpperCase())
+          for (const sk of included) {
+            lines.push(`${sk.category}: ${sk.items}`)
+          }
+          lines.push('')
+        }
+        break
+      }
+      case 'education': {
+        const included = state.education.filter(e => e.included)
+        if (included.length) {
+          lines.push(sec.header.toUpperCase())
+          for (const edu of included) {
+            const gpa = edu.gpa ? ` (GPA: ${edu.gpa})` : ''
+            lines.push(`${edu.degree}, ${edu.institution}${gpa} (${edu.dateStart} - ${edu.dateEnd})`)
+          }
+          lines.push('')
+        }
+        break
+      }
+      case 'custom': {
+        const data = state.customSections[sec.id]
+        if (data) {
+          const included = data.items.filter(i => i.included)
+          if (included.length) {
+            lines.push(sec.header.toUpperCase())
+            for (const item of included) {
+              if (item.label) {
+                lines.push(`${item.label}: ${item.text}`)
+              } else {
+                lines.push(`  - ${item.text}`)
+              }
+            }
+            lines.push('')
+          }
+        }
+        break
+      }
+    }
+  }
+
+  return lines.join('\n')
+}
+
 export interface ElementStyleOverride {
   bold?: boolean
   italic?: boolean
@@ -188,6 +327,9 @@ export interface ResumeBuilderState {
   toggleCustomItem: (sectionId: string, itemId: number) => void
 
   setExperiences: (exps: ExperienceItem[]) => void
+  addExperience: () => void
+  removeExperience: (id: number) => void
+  moveExperience: (id: number, direction: 'up' | 'down') => void
   updateExperience: (id: number, data: Partial<ExperienceItem>) => void
   toggleExperience: (id: number) => void
   addExperienceBullet: (id: number) => void
@@ -195,6 +337,9 @@ export interface ResumeBuilderState {
   removeExperienceBullet: (id: number, bulletIdx: number) => void
 
   setProjects: (projs: ProjectItem[]) => void
+  addProject: () => void
+  removeProject: (id: number) => void
+  moveProject: (id: number, direction: 'up' | 'down') => void
   updateProject: (id: number, data: Partial<ProjectItem>) => void
   toggleProject: (id: number) => void
   addProjectBullet: (id: number) => void
@@ -206,8 +351,12 @@ export interface ResumeBuilderState {
   toggleSkill: (id: number) => void
   addSkill: () => void
   removeSkill: (id: number) => void
+  moveSkill: (id: number, direction: 'up' | 'down') => void
 
   setEducation: (edu: EducationItem[]) => void
+  addEducation: () => void
+  removeEducation: (id: number) => void
+  moveEducation: (id: number, direction: 'up' | 'down') => void
   updateEducation: (id: number, data: Partial<EducationItem>) => void
   toggleEducation: (id: number) => void
 
@@ -235,6 +384,19 @@ export interface ResumeBuilderState {
   // Actions — lifecycle
   setLoaded: (v: boolean) => void
   markClean: () => void
+
+  // Reset to empty state
+  resetToEmpty: () => void
+
+  // Hydrate from parsed resume (heuristic parser output)
+  hydrateFromParsed: (parsed: {
+    contact: { fullName: string; email: string; phone: string; location: string; linkedin: string; github: string }
+    summary: string
+    experiences: Array<{ company: string; title: string; dateStart: string; dateEnd: string; bullets: string[] }>
+    projects: Array<{ name: string; techStack: string; bullets: string[] }>
+    skills: Array<{ category: string; items: string }>
+    education: Array<{ degree: string; institution: string; dateStart: string; dateEnd: string; gpa: string }>
+  }) => void
 
   // Hydrate from API data
   hydrateFromAPI: (data: {
@@ -272,6 +434,16 @@ function parseSkillItems(raw: any): string {
 // Helper to update item in array by id
 function updateById<T extends { id: number }>(arr: T[], id: number, data: Partial<T>): T[] {
   return arr.map(item => item.id === id ? { ...item, ...data } : item)
+}
+
+function moveItem<T extends { id: number }>(arr: T[], id: number, direction: 'up' | 'down'): T[] {
+  const idx = arr.findIndex(item => item.id === id)
+  if (idx < 0) return arr
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (targetIdx < 0 || targetIdx >= arr.length) return arr
+  const result = [...arr]
+  ;[result[idx], result[targetIdx]] = [result[targetIdx], result[idx]]
+  return result
 }
 
 // --- Snapshot helpers for undo/redo ---
@@ -463,6 +635,19 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => {
 
   // --- Experiences ---
   setExperiences: (experiences) => set({ experiences }),
+  addExperience: () => { pushHistory(true); set(s => {
+    const maxId = s.experiences.reduce((max, e) => Math.max(max, e.id), 0)
+    return {
+      experiences: [...s.experiences, { id: maxId + 1, company: '', title: '', dateStart: '', dateEnd: '', bullets: [''], included: true }],
+      dirty: true,
+    }
+  }) },
+  removeExperience: (id) => { pushHistory(true); set(s => ({
+    experiences: s.experiences.filter(e => e.id !== id), dirty: true,
+  })) },
+  moveExperience: (id, direction) => { pushHistory(true); set(s => ({
+    experiences: moveItem(s.experiences, id, direction), dirty: true,
+  })) },
   updateExperience: (id, data) => { pushHistory(); set(s => ({
     experiences: updateById(s.experiences, id, data), dirty: true,
   })) },
@@ -487,6 +672,19 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => {
 
   // --- Projects ---
   setProjects: (projects) => set({ projects }),
+  addProject: () => { pushHistory(true); set(s => {
+    const maxId = s.projects.reduce((max, p) => Math.max(max, p.id), 0)
+    return {
+      projects: [...s.projects, { id: maxId + 1, name: '', techStack: '', bullets: [''], included: true }],
+      dirty: true,
+    }
+  }) },
+  removeProject: (id) => { pushHistory(true); set(s => ({
+    projects: s.projects.filter(p => p.id !== id), dirty: true,
+  })) },
+  moveProject: (id, direction) => { pushHistory(true); set(s => ({
+    projects: moveItem(s.projects, id, direction), dirty: true,
+  })) },
   updateProject: (id, data) => { pushHistory(); set(s => ({
     projects: updateById(s.projects, id, data), dirty: true,
   })) },
@@ -527,9 +725,25 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => {
   removeSkill: (id) => { pushHistory(true); set(s => ({
     skills: s.skills.filter(sk => sk.id !== id), dirty: true,
   })) },
+  moveSkill: (id, direction) => { pushHistory(true); set(s => ({
+    skills: moveItem(s.skills, id, direction), dirty: true,
+  })) },
 
   // --- Education ---
   setEducation: (education) => set({ education }),
+  addEducation: () => { pushHistory(true); set(s => {
+    const maxId = s.education.reduce((max, e) => Math.max(max, e.id), 0)
+    return {
+      education: [...s.education, { id: maxId + 1, degree: '', institution: '', gpa: '', dateStart: '', dateEnd: '', included: true }],
+      dirty: true,
+    }
+  }) },
+  removeEducation: (id) => { pushHistory(true); set(s => ({
+    education: s.education.filter(e => e.id !== id), dirty: true,
+  })) },
+  moveEducation: (id, direction) => { pushHistory(true); set(s => ({
+    education: moveItem(s.education, id, direction), dirty: true,
+  })) },
   updateEducation: (id, data) => { pushHistory(); set(s => ({
     education: updateById(s.education, id, data), dirty: true,
   })) },
@@ -619,6 +833,94 @@ export const useResumeBuilderStore = create<ResumeBuilderState>((set, get) => {
   // --- Lifecycle ---
   setLoaded: (loaded) => set({ loaded }),
   markClean: () => set({ dirty: false }),
+
+  // --- Reset to empty ---
+  resetToEmpty: () => {
+    set({
+      contact: { fullName: '', location: '', phone: '', email: '', linkedin: '', github: '', portfolio: '' },
+      summary: '',
+      experiences: [],
+      projects: [],
+      skills: [],
+      education: [],
+      sectionHeaders: {
+        summary: 'Professional Summary',
+        skills: 'Technical Skills',
+        experience: 'Professional Experience',
+        projects: 'Key Projects',
+        education: 'Education',
+      },
+      sections: [...DEFAULT_SECTIONS],
+      customSections: {},
+      loaded: true,
+      dirty: false,
+      _history: [],
+      _future: [],
+      _lastSnapshotTime: 0,
+    })
+  },
+
+  // --- Hydrate from parsed resume ---
+  hydrateFromParsed: (parsed) => {
+    let nextId = 1
+    set({
+      contact: {
+        fullName: parsed.contact.fullName || '',
+        location: parsed.contact.location || '',
+        phone: parsed.contact.phone || '',
+        email: parsed.contact.email || '',
+        linkedin: parsed.contact.linkedin || '',
+        github: parsed.contact.github || '',
+        portfolio: '',
+      },
+      summary: parsed.summary || '',
+      experiences: parsed.experiences.map(e => ({
+        id: nextId++,
+        company: e.company,
+        title: e.title,
+        dateStart: e.dateStart,
+        dateEnd: e.dateEnd,
+        bullets: e.bullets,
+        included: true,
+      })),
+      projects: parsed.projects.map(p => ({
+        id: nextId++,
+        name: p.name,
+        techStack: p.techStack,
+        bullets: p.bullets,
+        included: true,
+      })),
+      skills: parsed.skills.map(s => ({
+        id: nextId++,
+        category: s.category,
+        items: s.items,
+        included: true,
+      })),
+      education: parsed.education.map(e => ({
+        id: nextId++,
+        degree: e.degree,
+        institution: e.institution,
+        gpa: e.gpa || '',
+        dateStart: e.dateStart,
+        dateEnd: e.dateEnd,
+        included: true,
+      })),
+      sectionHeaders: {
+        summary: 'Professional Summary',
+        skills: 'Technical Skills',
+        experience: 'Professional Experience',
+        projects: 'Key Projects',
+        education: 'Education',
+      },
+      sections: [...DEFAULT_SECTIONS],
+      customSections: {},
+      loaded: true,
+      dirty: true,
+      _history: [],
+      _future: [],
+      _lastSnapshotTime: 0,
+    })
+  },
 
   // --- Hydrate from API ---
   hydrateFromAPI: ({ profile, experiences, projects, skills, education, customSections: apiCustomSections }) => {

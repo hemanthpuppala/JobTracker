@@ -17,3 +17,7 @@ CORS_ORIGINS = [
 PORT = int(os.getenv("PORT", "13952"))
 
 VALENTINE_PASSWORD = {"month": "7", "day": "11", "year": "2002"}
+
+AI_PROVIDER = os.getenv("AI_PROVIDER", "claude_cli")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+AI_MODEL = os.getenv("AI_MODEL", "claude-sonnet-4-6")

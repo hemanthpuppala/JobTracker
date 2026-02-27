@@ -35,7 +35,13 @@ export const scoreResume = (data: ATSScoreRequest): Promise<ATSScoreResult> =>
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
-  }).then(r => r.json())
+  }).then(async r => {
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: `Server error (${r.status})` }))
+      throw new Error(err.detail || `Scoring failed (${r.status})`)
+    }
+    return r.json()
+  })
 
 export const listATSScores = (jobId?: number): Promise<ATSScoreResult[]> => {
   const url = jobId ? `${API}/api/ats/scores?job_id=${jobId}` : `${API}/api/ats/scores`

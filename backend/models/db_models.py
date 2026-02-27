@@ -180,11 +180,49 @@ class ATSScore(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(Integer, ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True)
+    session_id = Column(Integer, ForeignKey("tailor_sessions.id", ondelete="SET NULL"), nullable=True)
     job_description = Column(Text, nullable=False)
     resume_snapshot = Column(Text, nullable=False)
     overall_score = Column(Integer, nullable=False)
     category_scores = Column(Text, nullable=False)  # JSON
     suggestions = Column(Text)  # JSON array
+    created_at = Column(Text, nullable=False)
+
+
+class TailorSession(Base):
+    __tablename__ = "tailor_sessions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True)
+    job_description = Column(Text, nullable=False)
+    resume_source = Column(Text, nullable=False, default="db")
+    status = Column(Text, nullable=False, default="draft")
+    created_at = Column(Text, nullable=False)
+    updated_at = Column(Text, nullable=False)
+
+    events = relationship("SessionEvent", back_populates="session", cascade="all, delete-orphan",
+                          order_by="SessionEvent.created_at")
+
+
+class SessionEvent(Base):
+    __tablename__ = "session_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("tailor_sessions.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(Text, nullable=False)  # ats_score | ai_tailor | manual_edit | finalize
+    data = Column(Text)  # JSON
+    created_at = Column(Text, nullable=False)
+
+    session = relationship("TailorSession", back_populates="events")
+
+
+class SavedResume(Base):
+    __tablename__ = "saved_resumes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    label = Column(Text, nullable=False)
+    session_id = Column(Integer, ForeignKey("tailor_sessions.id", ondelete="SET NULL"), nullable=True)
+    data = Column(Text, nullable=False)  # JSON: full store snapshot
     created_at = Column(Text, nullable=False)
 
 
