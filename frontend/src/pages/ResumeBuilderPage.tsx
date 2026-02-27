@@ -5,7 +5,7 @@ import { useResumeBuilderStore, buildResumeText, getDocumentProps } from '../lib
 import { FONT_OPTIONS, MARGIN_PRESETS } from '../lib/resumeStyles'
 import { getProfile, experiencesApi, projectsApi, skillsApi, educationApi, customSectionsApi, updateProfile } from '../api/resume'
 import { scoreResume, type ATSScoreResult } from '../api/ats'
-import { tailorResumePipeline, type PipelineEvent } from '../api/ai'
+import { tailorResumePipeline, saveResume, type PipelineEvent } from '../api/ai'
 import ResumeForm from '../components/resume/ResumeForm'
 import InteractiveEditor from '../components/resume/InteractiveEditor'
 import ResumePreview from '../components/resume/ResumePreview'
@@ -13,12 +13,16 @@ import ResizableSplit from '../components/resume/ResizableSplit'
 import ResumeDocument from '../components/resume/ResumeDocument'
 import JDPanel from '../components/resume/JDPanel'
 import ATSModal from '../components/resume/ATSModal'
+import SourcePicker from '../components/resume/SourcePicker'
 import Button from '../components/ui/Button'
 import { cn } from '../lib/utils'
 
 export default function ResumeBuilderPage() {
   const nav = useNavigate()
   const store = useResumeBuilderStore()
+
+  // Source picker state — starts empty
+  const [sourceSelected, setSourceSelected] = useState(false)
 
   // AI / ATS state
   const [jd, setJd] = useState('')
@@ -37,22 +41,51 @@ export default function ResumeBuilderPage() {
   const [cachedJdAnalysis, setCachedJdAnalysis] = useState<Record<string, any> | null>(null)
   const [lastJdText, setLastJdText] = useState('')
 
-  // Load data from API on mount
-  useEffect(() => {
-    if (store.loaded) return
-    async function load() {
-      const [profile, experiences, projects, skills, education, customSections] = await Promise.all([
-        getProfile(),
-        experiencesApi.list(),
-        projectsApi.list(),
-        skillsApi.list(),
-        educationApi.list(),
-        customSectionsApi.list(),
-      ])
-      store.hydrateFromAPI({ profile, experiences, projects, skills, education, customSections })
+  // Session warning state
+  const [showSessionWarning, setShowSessionWarning] = useState(false)
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
+
+  const autoSaveAndStartNew = useCallback(async (action: () => void) => {
+    // Auto-save current resume before starting new session
+    const s = useResumeBuilderStore.getState()
+    const name = s.contact.fullName || 'Untitled'
+    const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const label = `${name} — ${date}`
+    try {
+      await saveResume({
+        label,
+        data: {
+          contact: s.contact,
+          summary: s.summary,
+          experiences: s.experiences,
+          projects: s.projects,
+          skills: s.skills,
+          education: s.education,
+        },
+        session_id: currentSessionId ?? undefined,
+      })
+    } catch {
+      // Don't block the new session if save fails
     }
-    load()
-  }, [store.loaded])
+    setCurrentSessionId(null)
+    setCachedJdAnalysis(null)
+    setPipelineEvents([])
+    action()
+    setShowSessionWarning(false)
+    setPendingAction(null)
+  }, [currentSessionId])
+
+  const handleSessionWarning = useCallback((action: () => void) => {
+    // Only show warning if there's meaningful content
+    const s = useResumeBuilderStore.getState()
+    const hasContent = s.contact.fullName || s.summary || s.experiences.length > 0
+    if (hasContent && sourceSelected) {
+      setPendingAction(() => action)
+      setShowSessionWarning(true)
+    } else {
+      action()
+    }
+  }, [sourceSelected])
 
   const handleTailor = useCallback(async () => {
     if (!jd.trim()) {
@@ -85,10 +118,27 @@ export default function ResumeBuilderPage() {
 
     try {
       const currentResumeText = buildResumeText(latest)
+
+      // Build structured resume from current store state (not DB)
+      // so the AI tailors the actual loaded resume, not the master resume
+      const resumeStructured = {
+        summary: latest.summary,
+        experiences: latest.experiences.filter(e => e.included).map(e => ({
+          id: e.id, company: e.company, title: e.title, bullets: e.bullets,
+        })),
+        projects: latest.projects.filter(p => p.included).map(p => ({
+          id: p.id, name: p.name, tech_stack: p.techStack, bullets: p.bullets,
+        })),
+        skills: latest.skills.filter(s => s.included).map(s => ({
+          id: s.id, category: s.category, items: s.items,
+        })),
+      }
+
       const result = await tailorResumePipeline(
         {
           job_description: jd,
           resume_text: currentResumeText,
+          resume_structured: resumeStructured,
           resume_source: 'live',
           job_id: selectedJobId,
           session_id: currentSessionId ?? undefined,
@@ -339,12 +389,29 @@ export default function ResumeBuilderPage() {
     return () => document.removeEventListener('keydown', handler)
   }, [store])
 
-  if (!store.loaded) {
+  // Show source picker if no source selected
+  if (!sourceSelected) {
     return (
-      <div className="h-screen flex items-center justify-center bg-bg text-text2">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <div className="text-sm">Loading resume data...</div>
+      <div className="h-screen flex flex-col bg-bg text-text">
+        <div className="flex items-center gap-3 px-4 py-2 bg-surface border-b border-border flex-shrink-0">
+          <button
+            onClick={() => nav(-1)}
+            className="text-text2 hover:text-text bg-transparent border-none cursor-pointer text-sm transition-colors"
+          >
+            &larr; Back
+          </button>
+          <span className="text-sm font-semibold">Resume Builder</span>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <ResizableSplit
+            left={<SourcePicker onSourceSelected={() => setSourceSelected(true)} />}
+            right={
+              <div className="h-full flex items-center justify-center bg-surface2 text-text2 text-xs">
+                Select a source to preview your resume
+              </div>
+            }
+            defaultLeftPercent={40}
+          />
         </div>
       </div>
     )
@@ -379,6 +446,11 @@ export default function ResumeBuilderPage() {
             onTailor={handleTailor} onCheckATS={handleCheckATS}
             tailoring={tailoring} scoring={scoring}
             pipelineEvents={pipelineEvents}
+            showSessionWarning={showSessionWarning}
+            onStartNewSession={() => pendingAction && autoSaveAndStartNew(pendingAction)}
+            onKeepCurrent={() => { setShowSessionWarning(false); setPendingAction(null) }}
+            onSessionWarning={handleSessionWarning}
+            lastJdText={lastJdText}
           />
         </div>
       )}

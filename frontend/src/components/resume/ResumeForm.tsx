@@ -227,13 +227,43 @@ function SummaryContent() {
   )
 }
 
+/** Reusable left-side controls: checkbox + move up/down arrows. */
+function ItemControls({ included, onToggle, onMoveUp, onMoveDown, isFirst, isLast, onRemove }: {
+  included: boolean; onToggle: () => void
+  onMoveUp: () => void; onMoveDown: () => void
+  isFirst: boolean; isLast: boolean; onRemove: () => void
+}) {
+  return (
+    <>
+      <div className="flex flex-col items-center gap-0.5 mt-0.5">
+        <input type="checkbox" checked={included} onChange={onToggle} className={checkCls} />
+        <div className="flex flex-col opacity-0 group-hover/card:opacity-100 transition-opacity">
+          <button type="button" onClick={onMoveUp} disabled={isFirst}
+            className="text-text2/60 hover:text-text bg-transparent border-none cursor-pointer text-[0.6rem] leading-none disabled:opacity-20 disabled:cursor-not-allowed p-0"
+            title="Move up">&#9650;</button>
+          <button type="button" onClick={onMoveDown} disabled={isLast}
+            className="text-text2/60 hover:text-text bg-transparent border-none cursor-pointer text-[0.6rem] leading-none disabled:opacity-20 disabled:cursor-not-allowed p-0"
+            title="Move down">&#9660;</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const removeBtnCls = "text-text2/40 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm mt-1 opacity-0 group-hover/card:opacity-100 transition-all"
+const addBtnCls = "text-xs text-accent hover:text-accent2 bg-transparent border border-dashed border-border hover:border-accent rounded-md px-3 py-1.5 cursor-pointer transition-all w-full"
+
 function SkillsContent() {
   const store = useResumeBuilderStore()
   return (
     <div className="space-y-2">
-      {store.skills.map(sk => (
-        <div key={sk.id} className="flex items-start gap-2 group/skill">
-          <input type="checkbox" checked={sk.included} onChange={() => store.toggleSkill(sk.id)} className={`${checkCls} mt-1.5`} />
+      {store.skills.map((sk, i) => (
+        <div key={sk.id} className="group/card flex items-start gap-2">
+          <ItemControls
+            included={sk.included} onToggle={() => store.toggleSkill(sk.id)}
+            onMoveUp={() => store.moveSkill(sk.id, 'up')} onMoveDown={() => store.moveSkill(sk.id, 'down')}
+            isFirst={i === 0} isLast={i === store.skills.length - 1} onRemove={() => store.removeSkill(sk.id)}
+          />
           <div className="flex-1 space-y-1">
             <Field elementId={`skill-${sk.id}-category`} section="skill" hasLabel={false} onDelete={() => store.removeSkill(sk.id)}>
               <input className={inputCls} placeholder="Category" value={sk.category}
@@ -244,12 +274,10 @@ function SkillsContent() {
                 onChange={e => store.updateSkill(sk.id, { items: e.target.value })} />
             </Field>
           </div>
+          <button type="button" onClick={() => store.removeSkill(sk.id)} className={removeBtnCls} title="Remove">&times;</button>
         </div>
       ))}
-      <button type="button" onClick={store.addSkill}
-        className="text-xs text-accent hover:text-accent2 bg-transparent border border-dashed border-border hover:border-accent rounded-md px-3 py-1.5 cursor-pointer transition-all w-full">
-        + Add Skill Category
-      </button>
+      <button type="button" onClick={store.addSkill} className={addBtnCls}>+ Add Skill Category</button>
     </div>
   )
 }
@@ -258,9 +286,15 @@ function ExperienceContent() {
   const store = useResumeBuilderStore()
   return (
     <div className="space-y-3">
-      {store.experiences.map(exp => (
-        <ExperienceCard key={exp.id} exp={exp} />
+      {store.experiences.map((exp, i) => (
+        <ExperienceCard key={exp.id} exp={exp} index={i} total={store.experiences.length} />
       ))}
+      <button
+        type="button"
+        onClick={() => store.addExperience()}
+        className="text-xs text-accent hover:text-accent2 bg-transparent border border-dashed border-border hover:border-accent rounded-md px-3 py-1.5 cursor-pointer transition-all w-full">
+        + Add Experience
+      </button>
     </div>
   )
 }
@@ -269,9 +303,15 @@ function ProjectsContent() {
   const store = useResumeBuilderStore()
   return (
     <div className="space-y-3">
-      {store.projects.map(proj => (
-        <ProjectCard key={proj.id} proj={proj} />
+      {store.projects.map((proj, i) => (
+        <ProjectCard key={proj.id} proj={proj} index={i} total={store.projects.length} />
       ))}
+      <button
+        type="button"
+        onClick={() => store.addProject()}
+        className="text-xs text-accent hover:text-accent2 bg-transparent border border-dashed border-border hover:border-accent rounded-md px-3 py-1.5 cursor-pointer transition-all w-full">
+        + Add Project
+      </button>
     </div>
   )
 }
@@ -280,9 +320,13 @@ function EducationContent() {
   const store = useResumeBuilderStore()
   return (
     <div className="space-y-3">
-      {store.education.map(edu => (
-        <div key={edu.id} className="flex items-start gap-2 p-2 rounded-lg bg-surface2/50 border border-border/50">
-          <input type="checkbox" checked={edu.included} onChange={() => store.toggleEducation(edu.id)} className={`${checkCls} mt-1`} />
+      {store.education.map((edu, i) => (
+        <div key={edu.id} className="group/card flex items-start gap-2 p-2 rounded-lg bg-surface2/50 border border-border/50">
+          <ItemControls
+            included={edu.included} onToggle={() => store.toggleEducation(edu.id)}
+            onMoveUp={() => store.moveEducation(edu.id, 'up')} onMoveDown={() => store.moveEducation(edu.id, 'down')}
+            isFirst={i === 0} isLast={i === store.education.length - 1} onRemove={() => store.removeEducation(edu.id)}
+          />
           <div className="flex-1 space-y-1">
             <Field elementId={`edu-${edu.id}-institution`} section="edu">
               <input className={inputCls} placeholder="Institution" value={edu.institution}
@@ -303,8 +347,10 @@ function EducationContent() {
                 onChange={e => store.updateEducation(edu.id, { dateEnd: e.target.value })} />
             </div>
           </div>
+          <button type="button" onClick={() => store.removeEducation(edu.id)} className={removeBtnCls} title="Remove">&times;</button>
         </div>
       ))}
+      <button type="button" onClick={() => store.addEducation()} className={addBtnCls}>+ Add Education</button>
     </div>
   )
 }
@@ -372,16 +418,20 @@ function CustomContent({ sectionId, section }: { sectionId: string; section: Res
 
 // --- Sub-components ---
 
-function ExperienceCard({ exp }: { exp: ReturnType<typeof useResumeBuilderStore.getState>['experiences'][0] }) {
-  const { updateExperience, toggleExperience, addExperienceBullet, updateExperienceBullet, removeExperienceBullet } = useResumeBuilderStore()
+function ExperienceCard({ exp, index, total }: { exp: ReturnType<typeof useResumeBuilderStore.getState>['experiences'][0]; index: number; total: number }) {
+  const { updateExperience, toggleExperience, removeExperience, moveExperience, addExperienceBullet, updateExperienceBullet, removeExperienceBullet } = useResumeBuilderStore()
 
   return (
     <div className={cn(
-      'p-2.5 rounded-lg border transition-all',
+      'group/card p-2.5 rounded-lg border transition-all',
       exp.included ? 'bg-surface2/50 border-border/50' : 'bg-surface2/20 border-border/20 opacity-60'
     )}>
       <div className="flex items-start gap-2">
-        <input type="checkbox" checked={exp.included} onChange={() => toggleExperience(exp.id)} className={`${checkCls} mt-1`} />
+        <ItemControls
+          included={exp.included} onToggle={() => toggleExperience(exp.id)}
+          onMoveUp={() => moveExperience(exp.id, 'up')} onMoveDown={() => moveExperience(exp.id, 'down')}
+          isFirst={index === 0} isLast={index === total - 1} onRemove={() => removeExperience(exp.id)}
+        />
         <div className="flex-1 space-y-1">
           <div className="grid grid-cols-2 gap-1">
             <Field elementId={`exp-${exp.id}-title`} section="exp">
@@ -431,21 +481,26 @@ function ExperienceCard({ exp }: { exp: ReturnType<typeof useResumeBuilderStore.
             </button>
           </div>
         </div>
+        <button type="button" onClick={() => removeExperience(exp.id)} className={removeBtnCls} title="Remove">&times;</button>
       </div>
     </div>
   )
 }
 
-function ProjectCard({ proj }: { proj: ReturnType<typeof useResumeBuilderStore.getState>['projects'][0] }) {
-  const { updateProject, toggleProject, addProjectBullet, updateProjectBullet, removeProjectBullet } = useResumeBuilderStore()
+function ProjectCard({ proj, index, total }: { proj: ReturnType<typeof useResumeBuilderStore.getState>['projects'][0]; index: number; total: number }) {
+  const { updateProject, toggleProject, removeProject, moveProject, addProjectBullet, updateProjectBullet, removeProjectBullet } = useResumeBuilderStore()
 
   return (
     <div className={cn(
-      'p-2.5 rounded-lg border transition-all',
+      'group/card p-2.5 rounded-lg border transition-all',
       proj.included ? 'bg-surface2/50 border-border/50' : 'bg-surface2/20 border-border/20 opacity-60'
     )}>
       <div className="flex items-start gap-2">
-        <input type="checkbox" checked={proj.included} onChange={() => toggleProject(proj.id)} className={`${checkCls} mt-1`} />
+        <ItemControls
+          included={proj.included} onToggle={() => toggleProject(proj.id)}
+          onMoveUp={() => moveProject(proj.id, 'up')} onMoveDown={() => moveProject(proj.id, 'down')}
+          isFirst={index === 0} isLast={index === total - 1} onRemove={() => removeProject(proj.id)}
+        />
         <div className="flex-1 space-y-1">
           <Field elementId={`proj-${proj.id}-name`} section="proj">
             <input className={inputCls} placeholder="Project Name" value={proj.name}
@@ -484,6 +539,7 @@ function ProjectCard({ proj }: { proj: ReturnType<typeof useResumeBuilderStore.g
             </button>
           </div>
         </div>
+        <button type="button" onClick={() => removeProject(proj.id)} className={removeBtnCls} title="Remove">&times;</button>
       </div>
     </div>
   )

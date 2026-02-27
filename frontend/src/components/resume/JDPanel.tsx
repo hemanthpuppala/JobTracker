@@ -21,6 +21,11 @@ interface Props {
   tailoring: boolean
   scoring: boolean
   pipelineEvents: PipelineEvent[]
+  showSessionWarning?: boolean
+  onStartNewSession?: () => void
+  onKeepCurrent?: () => void
+  onSessionWarning?: (action: () => void) => void
+  lastJdText?: string
 }
 
 const STEP_ICONS: Record<string, string> = {
@@ -36,6 +41,8 @@ export default function JDPanel({
   customPrompt, setCustomPrompt,
   onTailor, onCheckATS, tailoring, scoring,
   pipelineEvents,
+  showSessionWarning, onStartNewSession, onKeepCurrent,
+  onSessionWarning, lastJdText,
 }: Props) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [uploadedFileName, setUploadedFileName] = useState('')
@@ -64,12 +71,40 @@ export default function JDPanel({
     <div className="space-y-3 p-3 bg-surface rounded-lg border border-border">
       <h3 className="text-xs font-semibold text-text2 uppercase tracking-wider">AI Tailoring</h3>
 
+      {/* Session Warning Banner */}
+      {showSessionWarning && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 space-y-2">
+          <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+            Changing the JD/resume will start a new session. Your current resume will be auto-saved.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={onStartNewSession}
+              className="px-2.5 py-1 text-[0.65rem] font-medium bg-amber-500 text-white rounded cursor-pointer border-none hover:bg-amber-600 transition-colors"
+            >
+              Start New Session
+            </button>
+            <button
+              onClick={onKeepCurrent}
+              className="px-2.5 py-1 text-[0.65rem] font-medium bg-surface2 text-text2 border border-border rounded cursor-pointer hover:text-text transition-colors"
+            >
+              Keep Current
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Job Description */}
       <div>
         <label className="block text-xs font-medium text-text2 mb-1">Job Description</label>
         <textarea
           value={jd}
           onChange={e => setJd(e.target.value)}
+          onBlur={() => {
+            if (onSessionWarning && lastJdText && jd !== lastJdText) {
+              onSessionWarning(() => {})
+            }
+          }}
           placeholder="Paste the job description here..."
           rows={5}
           className="w-full bg-surface2 border border-border rounded-lg px-3 py-2 text-xs text-text placeholder:text-text2/50 focus:outline-none focus:border-accent/50 resize-y"
@@ -116,16 +151,23 @@ export default function JDPanel({
               onChange={async (e) => {
                 const file = e.target.files?.[0]
                 if (!file) return
-                setUploading(true)
-                setError('')
-                try {
-                  const res = await uploadResume(file)
-                  setPastedResume(res.text)
-                  setUploadedFileName(res.filename)
-                } catch (err: any) {
-                  setError(err?.message || 'Failed to parse file')
-                } finally {
-                  setUploading(false)
+                const doUpload = async () => {
+                  setUploading(true)
+                  setError('')
+                  try {
+                    const res = await uploadResume(file)
+                    setPastedResume(res.text)
+                    setUploadedFileName(res.filename)
+                  } catch (err: any) {
+                    setError(err?.message || 'Failed to parse file')
+                  } finally {
+                    setUploading(false)
+                  }
+                }
+                if (onSessionWarning) {
+                  onSessionWarning(doUpload)
+                } else {
+                  doUpload()
                 }
               }}
             />

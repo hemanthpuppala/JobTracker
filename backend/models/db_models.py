@@ -216,6 +216,16 @@ class SessionEvent(Base):
     session = relationship("TailorSession", back_populates="events")
 
 
+class SavedResume(Base):
+    __tablename__ = "saved_resumes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    label = Column(Text, nullable=False)
+    session_id = Column(Integer, ForeignKey("tailor_sessions.id", ondelete="SET NULL"), nullable=True)
+    data = Column(Text, nullable=False)  # JSON: full store snapshot
+    created_at = Column(Text, nullable=False)
+
+
 class GeneratedResume(Base):
     __tablename__ = "generated_resumes"
 
