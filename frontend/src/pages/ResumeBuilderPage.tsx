@@ -1,20 +1,41 @@
-import { useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pdf } from '@react-pdf/renderer'
-import { useResumeBuilderStore } from '../lib/resumeStore'
+import { useResumeBuilderStore, buildResumeText, getDocumentProps } from '../lib/resumeStore'
 import { FONT_OPTIONS, MARGIN_PRESETS } from '../lib/resumeStyles'
 import { getProfile, experiencesApi, projectsApi, skillsApi, educationApi, customSectionsApi, updateProfile } from '../api/resume'
+import { scoreResume, type ATSScoreResult } from '../api/ats'
+import { tailorResumePipeline, type PipelineEvent } from '../api/ai'
 import ResumeForm from '../components/resume/ResumeForm'
 import InteractiveEditor from '../components/resume/InteractiveEditor'
 import ResumePreview from '../components/resume/ResumePreview'
 import ResizableSplit from '../components/resume/ResizableSplit'
 import ResumeDocument from '../components/resume/ResumeDocument'
+import JDPanel from '../components/resume/JDPanel'
+import ATSModal from '../components/resume/ATSModal'
 import Button from '../components/ui/Button'
 import { cn } from '../lib/utils'
 
 export default function ResumeBuilderPage() {
   const nav = useNavigate()
   const store = useResumeBuilderStore()
+
+  // AI / ATS state
+  const [jd, setJd] = useState('')
+  const [resumeSource, setResumeSource] = useState<'db' | 'paste' | 'upload'>('db')
+  const [pastedResume, setPastedResume] = useState('')
+  const [selectedJobId, setSelectedJobId] = useState<number | undefined>()
+  const [tailoring, setTailoring] = useState(false)
+  const [scoring, setScoring] = useState(false)
+  const [atsResult, setAtsResult] = useState<ATSScoreResult | null>(null)
+  const [showATSModal, setShowATSModal] = useState(false)
+  const [optimizing, setOptimizing] = useState(false)
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
+  const [showJDPanel, setShowJDPanel] = useState(false)
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([])
+  const [customPrompt, setCustomPrompt] = useState('')
+  const [cachedJdAnalysis, setCachedJdAnalysis] = useState<Record<string, any> | null>(null)
+  const [lastJdText, setLastJdText] = useState('')
 
   // Load data from API on mount
   useEffect(() => {
@@ -32,6 +53,143 @@ export default function ResumeBuilderPage() {
     }
     load()
   }, [store.loaded])
+
+  const handleTailor = useCallback(async () => {
+    if (!jd.trim()) {
+      alert('Please enter a job description first')
+      return
+    }
+    setTailoring(true)
+    setPipelineEvents([])
+
+    // Clear cached JD analysis if JD text changed
+    const jdChanged = jd !== lastJdText
+    const jdAnalysisToSend = jdChanged ? undefined : cachedJdAnalysis ?? undefined
+    if (jdChanged) setCachedJdAnalysis(null)
+    setLastJdText(jd)
+
+    // Get fresh store state for PDF generation and resume text
+    const latest = useResumeBuilderStore.getState()
+
+    // Detect PDF page count
+    let pdfPageCount: number | undefined
+    try {
+      const blob = await pdf(<ResumeDocument {...getDocumentProps(latest)} />).toBlob()
+      const buf = await blob.arrayBuffer()
+      const text = new TextDecoder('latin1').decode(buf)
+      const pageMatches = text.match(/\/Type\s*\/Page[^s]/g)
+      pdfPageCount = pageMatches ? pageMatches.length : 1
+    } catch {
+      // Fallback — don't block tailoring if page count detection fails
+    }
+
+    try {
+      const currentResumeText = buildResumeText(latest)
+      const result = await tailorResumePipeline(
+        {
+          job_description: jd,
+          resume_text: currentResumeText,
+          resume_source: 'live',
+          job_id: selectedJobId,
+          session_id: currentSessionId ?? undefined,
+          custom_prompt: customPrompt || undefined,
+          jd_analysis: jdAnalysisToSend,
+          pdf_page_count: pdfPageCount,
+        },
+        (event) => {
+          setPipelineEvents(prev => [...prev, event])
+
+          // Capture session_id from first event
+          if (event.step === 'session' && event.data?.session_id) {
+            setCurrentSessionId(event.data.session_id)
+          }
+
+          // Cache JD analysis for reuse on subsequent clicks
+          if (event.step === 'analyze_jd' && event.status === 'done' && event.data) {
+            setCachedJdAnalysis(event.data)
+          }
+
+          // Apply partial results incrementally — always read fresh state
+          if (event.status === 'done' && event.data) {
+            const s = useResumeBuilderStore.getState()
+            if (event.step === 'tailor_summary' && event.data.summary) {
+              s.setSummary(event.data.summary)
+            }
+            if (event.step.startsWith('tailor_exp_') && event.data.id) {
+              s.setExperiences(
+                s.experiences.map(exp =>
+                  exp.id === event.data.id
+                    ? { ...exp, bullets: event.data.bullets || exp.bullets, included: event.data.included ?? exp.included }
+                    : exp
+                )
+              )
+            }
+            if (event.step.startsWith('tailor_proj_') && event.data.id) {
+              s.setProjects(
+                s.projects.map(proj =>
+                  proj.id === event.data.id
+                    ? { ...proj, bullets: event.data.bullets || proj.bullets, included: event.data.included ?? proj.included }
+                    : proj
+                )
+              )
+            }
+            if (event.step === 'tailor_skills' && Array.isArray(event.data)) {
+              s.setSkills(
+                s.skills.map(sk => {
+                  const ai = event.data.find((d: any) => d.id === sk.id)
+                  if (!ai) return sk
+                  return { ...sk, items: ai.items || sk.items, included: ai.included ?? sk.included }
+                })
+              )
+            }
+            if (event.step === 'rescore' && event.data.score !== undefined) {
+              setAtsResult({
+                id: 0,
+                overall_score: event.data.score,
+                category_scores: event.data.categories || {},
+                suggestions: event.data.suggestions || [],
+                created_at: new Date().toISOString(),
+              })
+            }
+          }
+        },
+      )
+    } catch (e: any) {
+      alert(e?.message || 'AI tailoring failed')
+    } finally {
+      setTailoring(false)
+    }
+  }, [jd, selectedJobId, currentSessionId, customPrompt, cachedJdAnalysis, lastJdText])
+
+  const handleCheckATS = useCallback(async () => {
+    if (!jd.trim()) {
+      alert('Please enter a job description first')
+      return
+    }
+    setScoring(true)
+    try {
+      // Always score the current resume as shown in the PDF preview
+      const latest = useResumeBuilderStore.getState()
+      const currentResumeText = buildResumeText(latest)
+      const result = await scoreResume({
+        job_description: jd,
+        resume_text: currentResumeText,
+        job_id: selectedJobId,
+      })
+      setAtsResult(result)
+      setShowATSModal(true)
+    } catch (e: any) {
+      alert(e?.message || 'ATS scoring failed')
+    } finally {
+      setScoring(false)
+    }
+  }, [jd, selectedJobId])
+
+  const handleOptimize = useCallback(async () => {
+    if (!jd.trim()) return
+    setShowATSModal(false)
+    handleTailor()
+  }, [jd, handleTailor])
 
   // Save to DB
   const handleSave = useCallback(async () => {
@@ -129,22 +287,7 @@ export default function ResumeBuilderPage() {
 
   // Download PDF (client-side)
   const handleDownloadPDF = useCallback(async () => {
-    const blob = await pdf(
-      <ResumeDocument
-        contact={store.contact}
-        summary={store.summary}
-        experiences={store.experiences}
-        projects={store.projects}
-        skills={store.skills}
-        education={store.education}
-        styleConfig={store.styles}
-        richContent={store.richContent}
-        elementStyles={store.elementStyles}
-        sectionHeaders={store.sectionHeaders}
-        sections={store.sections}
-        customSections={store.customSections}
-      />
-    ).toBlob()
+    const blob = await pdf(<ResumeDocument {...getDocumentProps(store)} />).toBlob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -206,6 +349,45 @@ export default function ResumeBuilderPage() {
       </div>
     )
   }
+
+  const leftPanel = (
+    <div className="h-full flex flex-col overflow-y-auto">
+      {/* JD Panel toggle */}
+      {store.mode === 'form' && (
+        <div className="flex-shrink-0 px-3 pt-2">
+          <button
+            onClick={() => setShowJDPanel(!showJDPanel)}
+            className={cn(
+              'w-full text-left px-3 py-2 rounded-lg text-xs font-medium border cursor-pointer transition-all',
+              showJDPanel
+                ? 'bg-accent/10 border-accent/30 text-accent'
+                : 'bg-surface2 border-border text-text2 hover:text-text hover:border-accent/30',
+            )}
+          >
+            {showJDPanel ? 'Hide AI Tailoring' : 'AI Tailoring & ATS'}
+          </button>
+        </div>
+      )}
+      {showJDPanel && store.mode === 'form' && (
+        <div className="flex-shrink-0 px-3 pt-2">
+          <JDPanel
+            jd={jd} setJd={setJd}
+            resumeSource={resumeSource} setResumeSource={setResumeSource}
+            pastedResume={pastedResume} setPastedResume={setPastedResume}
+            selectedJobId={selectedJobId} setSelectedJobId={setSelectedJobId}
+            customPrompt={customPrompt} setCustomPrompt={setCustomPrompt}
+            onTailor={handleTailor} onCheckATS={handleCheckATS}
+            tailoring={tailoring} scoring={scoring}
+            pipelineEvents={pipelineEvents}
+          />
+        </div>
+      )}
+      {/* Original form/editor */}
+      <div className="flex-1 min-h-0">
+        {store.mode === 'interactive' ? <InteractiveEditor /> : <ResumeForm />}
+      </div>
+    </div>
+  )
 
   return (
     <div className="h-screen flex flex-col bg-bg text-text">
@@ -345,21 +527,26 @@ export default function ResumeBuilderPage() {
         <Button size="sm" onClick={handleDownloadDOCX}>
           &#11015; DOCX
         </Button>
-        <a href="/ats-score" target="_blank" rel="noopener">
-          <Button variant="outline" size="sm" type="button">
-            Check ATS
-          </Button>
-        </a>
       </div>
 
       {/* Content — both modes use PDF preview as right pane (source of truth) */}
       <div className="flex-1 overflow-hidden">
         <ResizableSplit
-          left={store.mode === 'interactive' ? <InteractiveEditor /> : <ResumeForm />}
+          left={leftPanel}
           right={<ResumePreview />}
           defaultLeftPercent={store.mode === 'interactive' ? 50 : 40}
         />
       </div>
+
+      {/* ATS Modal */}
+      {showATSModal && atsResult && (
+        <ATSModal
+          result={atsResult}
+          onClose={() => setShowATSModal(false)}
+          onOptimize={handleOptimize}
+          optimizing={optimizing}
+        />
+      )}
     </div>
   )
 }

@@ -92,6 +92,145 @@ export const DEFAULT_SECTIONS: ResumeSection[] = [
 
 export type EditorMode = 'form' | 'interactive'
 
+/** Extract ResumeDocument props from the store (DRY helper used by preview, download, and page count). */
+export function getDocumentProps(store: {
+  contact: ContactInfo
+  summary: string
+  experiences: ExperienceItem[]
+  projects: ProjectItem[]
+  skills: SkillItem[]
+  education: EducationItem[]
+  styles: ResumeStyleConfig
+  richContent: Record<string, any>
+  elementStyles: Record<string, any>
+  sectionHeaders: Record<string, string>
+  sections: ResumeSection[]
+  customSections: Record<string, any>
+}) {
+  return {
+    contact: store.contact,
+    summary: store.summary,
+    experiences: store.experiences,
+    projects: store.projects,
+    skills: store.skills,
+    education: store.education,
+    styleConfig: store.styles,
+    richContent: store.richContent,
+    elementStyles: store.elementStyles,
+    sectionHeaders: store.sectionHeaders,
+    sections: store.sections,
+    customSections: store.customSections,
+  }
+}
+
+/**
+ * Build plain-text representation of the resume from store state.
+ * Mirrors what the PDF preview renders — respects section order, visibility, and included flags.
+ */
+export function buildResumeText(state: {
+  contact: ContactInfo
+  summary: string
+  experiences: ExperienceItem[]
+  projects: ProjectItem[]
+  skills: SkillItem[]
+  education: EducationItem[]
+  sections: ResumeSection[]
+  sectionHeaders: Record<string, string>
+  customSections: Record<string, CustomSectionData>
+}): string {
+  const lines: string[] = []
+
+  // Contact header
+  lines.push(state.contact.fullName)
+  const parts = [state.contact.email, state.contact.phone, state.contact.location,
+    state.contact.linkedin, state.contact.github, state.contact.portfolio].filter(Boolean)
+  if (parts.length) lines.push(parts.join(' | '))
+  lines.push('')
+
+  // Sections in order
+  const sorted = [...state.sections].sort((a, b) => a.order - b.order)
+  for (const sec of sorted) {
+    if (!sec.visible) continue
+    switch (sec.type) {
+      case 'summary':
+        if (state.summary) {
+          lines.push(sec.header.toUpperCase())
+          lines.push(state.summary)
+          lines.push('')
+        }
+        break
+      case 'experience': {
+        const included = state.experiences.filter(e => e.included)
+        if (included.length) {
+          lines.push(sec.header.toUpperCase())
+          for (const exp of included) {
+            const dateRange = `${exp.dateStart} - ${exp.dateEnd || 'Present'}`
+            lines.push(`${exp.title}, ${exp.company} (${dateRange})`)
+            for (const b of exp.bullets) lines.push(`  - ${b}`)
+            lines.push('')
+          }
+        }
+        break
+      }
+      case 'projects': {
+        const included = state.projects.filter(p => p.included)
+        if (included.length) {
+          lines.push(sec.header.toUpperCase())
+          for (const proj of included) {
+            lines.push(`${proj.name} | ${proj.techStack}`)
+            for (const b of proj.bullets) lines.push(`  - ${b}`)
+            lines.push('')
+          }
+        }
+        break
+      }
+      case 'skills': {
+        const included = state.skills.filter(s => s.included)
+        if (included.length) {
+          lines.push(sec.header.toUpperCase())
+          for (const sk of included) {
+            lines.push(`${sk.category}: ${sk.items}`)
+          }
+          lines.push('')
+        }
+        break
+      }
+      case 'education': {
+        const included = state.education.filter(e => e.included)
+        if (included.length) {
+          lines.push(sec.header.toUpperCase())
+          for (const edu of included) {
+            const gpa = edu.gpa ? ` (GPA: ${edu.gpa})` : ''
+            lines.push(`${edu.degree}, ${edu.institution}${gpa} (${edu.dateStart} - ${edu.dateEnd})`)
+          }
+          lines.push('')
+        }
+        break
+      }
+      case 'custom': {
+        const data = state.customSections[sec.id]
+        if (data) {
+          const included = data.items.filter(i => i.included)
+          if (included.length) {
+            lines.push(sec.header.toUpperCase())
+            for (const item of included) {
+              if (item.label) {
+                lines.push(`${item.label}: ${item.text}`)
+              } else {
+                lines.push(`  - ${item.text}`)
+              }
+            }
+            lines.push('')
+          }
+        }
+        break
+      }
+    }
+  }
+
+  return lines.join('\n')
+}
+
 export interface ElementStyleOverride {
   bold?: boolean
   italic?: boolean

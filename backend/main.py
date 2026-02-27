@@ -1,4 +1,8 @@
+import logging
 from contextlib import asynccontextmanager
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logging.getLogger("resume_tailor").setLevel(logging.INFO)
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -7,7 +11,7 @@ from fastapi.responses import FileResponse
 from .db import init_tables, SessionLocal
 from .seed import seed_resume_data
 from .config import CORS_ORIGINS, STATIC_DIR, PORT
-from .routes import auth, jobs, resume_data, resume_generate, ats
+from .routes import auth, jobs, resume_data, resume_generate, ats, ai_tailor
 from .services.websocket import connected_clients
 
 
@@ -38,6 +42,7 @@ app.include_router(jobs.router)
 app.include_router(resume_data.router)
 app.include_router(resume_generate.router)
 app.include_router(ats.router)
+app.include_router(ai_tailor.router)
 
 
 @app.websocket("/ws")
